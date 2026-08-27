@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>St Joseph's Children's & Diabetic Clinic</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23C08A3E' stroke-width='2' fill='none'/%3E%3Cpath d='M10 33H24L28 18L36 48L41 33H54' stroke='%23F1ECDF' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23C08A3E' stroke-width='2' fill='none'/%3E%3Cpath d='M10 33H24L28 18L36 48L41 33H54' stroke='%23F1ECDF' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -85,6 +87,12 @@
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row select{max-width:150px;}
   .search-row input{max-width:260px;}
+  .app-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);}
+  .app-loading-mark{animation:appLoadingPulse 1.7s ease-in-out infinite;}
+  .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
+  .app-loading-text{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);}
+  @keyframes appLoadingPulse{0%,100%{opacity:.5;transform:scale(.92);}50%{opacity:1;transform:scale(1);}}
+  @media (prefers-reduced-motion:reduce){.app-loading-mark{animation:none;}}
   @media (max-width:720px){
     .admin-shell{flex-direction:column;}
     .admin-side{width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;}
@@ -95,7 +103,18 @@
 </style>
 </head>
 <body>
-<div id="app">Loading…</div>
+<div id="app">
+  <div class="app-loading">
+    <div class="app-loading-mark">
+      <svg width="46" height="46" viewBox="0 0 30 30" fill="none">
+        <circle cx="15" cy="15" r="14" stroke="#C08A3E" stroke-width="1.5"/>
+        <path d="M4 15 H10 L12.5 8 L17 22 L19.5 15 H26" stroke="#1F4A42" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="app-loading-name">St Joseph's Clinic</div>
+    <div class="app-loading-text">Loading…</div>
+  </div>
+</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
