@@ -350,23 +350,28 @@ window.savePatientForm = async function(){
 window.importPatientFile = async function(){
   const fileInput = document.getElementById('import-file');
   const statusEl = document.getElementById('import-status');
+  const resumeFrom = Math.max(0, parseInt(document.getElementById('import-resume').value, 10) || 0);
   const file = fileInput.files[0];
   if(!file){ statusEl.textContent='Choose a file first.'; return; }
   try{
-    const countSnap = await getCountFromServer(collection(db,'patients'));
-    if(countSnap.data().count > 0){
-      const proceed = confirm('There are already '+countSnap.data().count+' patients in the database. Importing again may create duplicate entries. Continue?');
-      if(!proceed){ statusEl.textContent='Import cancelled.'; return; }
+    if(resumeFrom===0){
+      const countSnap = await getCountFromServer(collection(db,'patients'));
+      if(countSnap.data().count > 0){
+        const proceed = confirm('There are already '+countSnap.data().count+' patients in the database. Importing again may create duplicate entries. Continue?');
+        if(!proceed){ statusEl.textContent='Import cancelled.'; return; }
+      }
     }
     statusEl.textContent = 'Reading file…';
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, {type:'array'});
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-    let batch = writeBatch(db), opCount=0, total=0, skipped=0;
+    let batch = writeBatch(db), opCount=0, validSeen=0, uploaded=0, skipped=0;
     for(const r of rows){
       const opdNo = String(r.OPregNos ?? r.opdNo ?? '').trim();
       const name = String(r.PatientName ?? r.name ?? '').trim();
       if(!opdNo || !name){ skipped++; continue; }
+      validSeen++;
+      if(validSeen<=resumeFrom) continue;
       const address = String(r.Address ?? '').trim();
       const ref = doc(collection(db,'patients'));
       batch.set(ref, {
@@ -375,12 +380,12 @@ window.importPatientFile = async function(){
         address, addressLower:address.toLowerCase(),
         registeredAtMillis: Date.now(), registeredAt: new Date().toISOString()
       });
-      opCount++; total++;
-      if(opCount===450){ await batch.commit(); batch=writeBatch(db); opCount=0; statusEl.textContent = `Uploaded ${total} of ${rows.length}…`; }
+      opCount++; uploaded++;
+      if(opCount===450){ await batch.commit(); batch=writeBatch(db); opCount=0; statusEl.textContent = `Uploaded ${resumeFrom+uploaded} of ${rows.length}…`; }
     }
     if(opCount>0) await batch.commit();
     statusEl.textContent = '';
-    showToast(`Import complete: ${total} uploaded, ${skipped} skipped (missing OPD no. or name).`);
+    showToast(`Import complete: ${uploaded} uploaded${resumeFrom?` (resumed after row ${resumeFrom})`:''}, ${skipped} skipped (missing OPD no. or name).`);
     lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
   }catch(e){
     console.error(e);
@@ -581,6 +586,11 @@ function viewAdminPatients(){
     <h3 style="margin-top:0;">Bulk import from Excel / CSV</h3>
     <p style="color:var(--text-muted);font-size:13px;margin-top:0;">Columns: <span class="mono">OPregNos, PatientName, Address, PhoneNo, Gender, Age</span>. One-time use — tell Claude once it's done and this box can be removed.</p>
     <input id="import-file" type="file" accept=".xlsx,.xls,.csv">
+    <div class="field" style="max-width:280px;margin-top:12px;margin-bottom:0;">
+      <label>Resume from row (leave 0 for a fresh import)</label>
+      <input id="import-resume" type="number" min="0" value="0">
+    </div>
+    <p style="color:var(--text-muted);font-size:12px;margin:6px 0 0;">If an import stopped partway (e.g. status showed "Uploaded 19800 of…"), re-select the <em>same file</em> and enter that number here — rows already uploaded will be skipped so you don't get duplicates.</p>
     <div class="row-actions" style="margin-top:10px;"><button class="btn btn-accent" onclick="importPatientFile()">Import file</button></div>
     <div id="import-status" style="margin-top:10px;font-size:13px;color:var(--text-muted);"></div>
   </div>`;
