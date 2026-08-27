@@ -371,14 +371,15 @@ window.importPatientFile = async function(){
 
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
-  const email=document.getElementById('admin-email').value.trim();
+  const username=document.getElementById('admin-email').value.trim().toLowerCase();
   const pass=document.getElementById('admin-pass').value;
+  const email = username.includes('@') ? username : username + '@clinicstjosephs.com';
   try{
     await signInWithEmailAndPassword(auth, email, pass);
     state.loginError='';
     setView('admin-dashboard');
   }catch(e){
-    state.loginError = 'Login failed — check the email and password.';
+    state.loginError = 'Login failed — check the username and password.';
     render();
   }
 };
@@ -499,7 +500,7 @@ function viewAdminLogin(){
   <h2 class="display">Staff login</h2>
   <div class="card">
     ${state.loginError?`<div class="top-alert">${escapeHtml(state.loginError)}</div>`:''}
-    <div class="field"><label>Email</label><input id="admin-email" type="email" placeholder="you@clinic.com"></div>
+    <div class="field"><label>Username</label><input id="admin-email" type="text" placeholder="admin"></div>
     <div class="field"><label>Password</label><input id="admin-pass" type="password" onkeydown="if(event.key==='Enter')tryAdminLogin()"></div>
     <button class="btn btn-primary" onclick="tryAdminLogin()">Log in</button>
   </div></section></div>${publicFooter()}`;
