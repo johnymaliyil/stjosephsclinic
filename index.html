@@ -4,8 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>St Joseph's Children's & Diabetic Clinic</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F4A42">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="St Joseph's Clinic">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23C08A3E' stroke-width='2' fill='none'/%3E%3Cpath d='M10 33H24L28 18L36 48L41 33H54' stroke='%23F1ECDF' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23C08A3E' stroke-width='2' fill='none'/%3E%3Cpath d='M10 33H24L28 18L36 48L41 33H54' stroke='%23F1ECDF' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -182,6 +188,7 @@ const DEFAULT_INFO = {
 
 let state = {
   view:'home', isAdmin:false, loginError:'', toast:'',
+  showInstallButton:false, showIosInstallHint:false,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
@@ -546,6 +553,43 @@ window.tryAdminLogin = async function(){
 window.adminLogout = async function(){ await signOut(auth); setView('home'); };
 onAuthStateChanged(auth, (user)=>{ state.isAdmin = !!user; render(); });
 
+/* ---------- PWA install ---------- */
+let deferredInstallPrompt = null;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  state.showInstallButton = true;
+  render();
+});
+window.addEventListener('appinstalled', ()=>{
+  deferredInstallPrompt = null;
+  state.showInstallButton = false;
+  render();
+});
+window.installApp = async function(){
+  if(!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  state.showInstallButton = false;
+  render();
+};
+window.dismissIosInstallHint = function(){
+  state.showIosInstallHint = false;
+  try{ localStorage.setItem('iosInstallHintDismissed','1'); }catch(e){}
+  render();
+};
+if(isIos && !isStandalone){
+  let dismissed = false;
+  try{ dismissed = localStorage.getItem('iosInstallHintDismissed')==='1'; }catch(e){}
+  state.showIosInstallHint = !dismissed;
+}
+
 /* ---------- dashboard ---------- */
 async function loadDashboardStats(){
   try{ state.patientCount = (await getCountFromServer(collection(db,'patients'))).data().count; }
@@ -619,9 +663,13 @@ function publicHeader(){
     <div class="logo">${logoMark()} ${escapeHtml(state.data.info.clinicName)}</div>
     <nav class="links">
       ${links.map(([v,l])=>`<button class="${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
+      ${state.showInstallButton?`<button class="btn btn-accent btn-small" style="margin-left:6px;" onclick="installApp()">⬇ Install app</button>`:''}
       <button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">Staff Login</button>
     </nav>
-  </div></header>`;
+  </div>${state.showIosInstallHint?`<div class="container"><div class="top-alert" style="margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <span>Install this app: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</span>
+    <button class="btn btn-outline btn-small" onclick="dismissIosInstallHint()">Dismiss</button>
+  </div></div>`:''}</header>`;
 }
 function publicFooter(){
   const i=state.data.info;
