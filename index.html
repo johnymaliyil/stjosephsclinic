@@ -87,6 +87,10 @@
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row select{max-width:150px;}
   .search-row input{max-width:260px;}
+  .roadmap-svg{width:100%;height:auto;display:block;}
+  .founder-card{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding-top:8px;}
+  .founder-photo{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid var(--accent-soft);}
+  .founder-placeholder{width:120px;height:120px;border-radius:50%;background:var(--surface-soft);border:3px solid var(--accent-soft);display:flex;align-items:center;justify-content:center;}
   .app-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);}
   .app-loading-mark{animation:appLoadingPulse 1.7s ease-in-out infinite;}
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
@@ -153,6 +157,10 @@ const DEFAULT_INFO = {
   address: "Dr M M Varkey Memorial Building, Near Silver Hills NAXA Cinemas, Thodupuzha P.O, Idukki, Pin 685584",
   phone: "04862-222620",
   hours: "Mon–Sat: 9:30–1:30 & 4:30–7:30 | Sun: By appointment, 10:00–12:00",
+  welcomeText: "Hi, welcome to St. Joseph Hospital & Children's Clinic. Dr. Joseph Varkey and his dedicated team have made all efforts to ensure that your experience here is a pleasant one. Our speciality is paediatrics.\n\nSt. Joseph Hospital & Children's Clinic is a friendly, child-centered, family-oriented local clinic for children. This is a very child-friendly clinic with a welcoming atmosphere. Parents and children are free to ask any questions with regard to their health. Each consultation lasts around 15 to 30 minutes. You will be given guidance about your child's growth and development, and the latest information about any aspects of your child's illness. At St. Joseph Hospital & Children's Clinic, vaccination visits are also optimally utilised to provide guidance regarding diet (including nutritional counselling), parenting issues, physical exercise and healthy lifestyle from an early age, and prevention of injuries.",
+  aboutUsText: "St. Joseph's Hospital and Children's Clinic, Thodupuzha was started in the year 1950 by Late Dr. M. M. Varkey, MBBS. He started a nursing home and served the people of Thodupuzha for more than 25 years. The confidence and trust of his patients, his very hard work, and his tenacity of purpose along with the goodwill of friends and relatives helped us through. We thank God for all His mercies and guidance over the years.",
+  founderName: "Founder Dr M M Varkey",
+  founderPhotoUrl: "",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant" },
@@ -164,7 +172,7 @@ const DEFAULT_INFO = {
     { name: "In-house Pharmacy", description: "Prescribed medicines available directly at the clinic." }
   ],
   labTests: [
-    { name: "Thyrocare Sample Collection", description: "We are an authorised Thyrocare collection point — samples are couriered to Thyrocare labs, reports shared once ready." },
+    { name: "Thyrocare Laboratory", description: "India's largest laboratory chain — we are an authorised Thyrocare collection point, samples are couriered to Thyrocare labs and reports shared once ready." },
     { name: "Blood Sugar (Fasting / PP / Random)", description: "Routine diabetes monitoring tests, available at the clinic." },
     { name: "HbA1c", description: "3-month average blood sugar test for diabetic patients." },
     { name: "Thyroid Profile", description: "T3, T4, TSH panel via Thyrocare." },
@@ -196,6 +204,10 @@ window.saveClinicInfo = async function(){
   i.tagline = document.getElementById('if-tagline').value.trim();
   i.address = document.getElementById('if-address').value.trim();
   i.hours = document.getElementById('if-hours').value.trim();
+  i.welcomeText = document.getElementById('if-welcome').value.trim();
+  i.aboutUsText = document.getElementById('if-about').value.trim();
+  i.founderName = document.getElementById('if-founder-name').value.trim();
+  i.founderPhotoUrl = document.getElementById('if-founder-photo').value.trim();
   await setDoc(infoRef, i);
   showToast('Clinic info saved.');
 };
@@ -444,10 +456,39 @@ function pulseDivider(){
     <path d="M0 18 H220 L240 4 L258 32 L275 12 L290 24 L305 18 H600" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
   </svg>`;
 }
+function findUsMapSvg(){
+  return `<svg class="roadmap-svg" viewBox="0 0 720 300" role="img" aria-label="Simple road map to St Joseph's Children's Clinic, Thodupuzha">
+    <line x1="40" y1="140" x2="660" y2="140" stroke="var(--border)" stroke-width="6" stroke-linecap="round"/>
+    <text x="350" y="164" text-anchor="middle" class="mono" font-size="11" fill="var(--text-muted)" letter-spacing="0.06em">MUVATTUPUZHA ROAD</text>
+
+    <path d="M110 140 V84 L66 48" stroke="var(--border)" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <circle cx="66" cy="48" r="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="80" y="44" class="mono" font-size="12" fill="var(--text)" font-weight="600">Bhima Jewellers</text>
+
+    <path d="M150 140 V172" stroke="var(--border)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="150" cy="172" r="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="150" y="196" text-anchor="middle" class="mono" font-size="12" fill="var(--text)" font-weight="600">Kalyan Jewellers</text>
+
+    <circle cx="400" cy="140" r="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="400" y="122" text-anchor="middle" class="mono" font-size="12" fill="var(--text)" font-weight="600">Silver Hills NAXA Cinemas</text>
+
+    <path d="M520 140 Q590 150 600 210" stroke="var(--accent)" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <circle cx="600" cy="228" r="22" fill="var(--primary-dark)" stroke="var(--accent)" stroke-width="2.5"/>
+    <path d="M588 228H595L598 219L604 238L608 228H614" stroke="#F1ECDF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="600" y="266" text-anchor="middle" class="display" font-size="13" font-weight="700" fill="var(--primary-dark)">St Joseph's</text>
+    <text x="600" y="282" text-anchor="middle" class="display" font-size="13" font-weight="700" fill="var(--primary-dark)">Children's Clinic</text>
+  </svg>`;
+}
+function founderHtml(i){
+  const photo = i.founderPhotoUrl
+    ? `<img class="founder-photo" src="${escapeHtml(i.founderPhotoUrl)}" alt="${escapeHtml(i.founderName||'Founder')}">`
+    : `<div class="founder-placeholder">${logoMark()}</div>`;
+  return `<div class="founder-card">${photo}<div style="font-weight:600;color:var(--primary-dark);">${escapeHtml(i.founderName||'')}</div></div>`;
+}
 
 /* ---------- public views ---------- */
 function publicHeader(){
-  const links=[['home','Home'],['services','Services & Lab'],['blog','Blog'],['book','Book Appointment']];
+  const links=[['home','Home'],['about','About'],['services','Services & Lab'],['blog','Blog'],['book','Book Appointment']];
   return `<header class="site"><div class="container nav-row">
     <div class="logo">${logoMark()} ${escapeHtml(state.data.info.clinicName)}</div>
     <nav class="links">
@@ -492,6 +533,28 @@ function viewHome(){
   <div class="container">
   <section><h2 class="display" style="font-size:22px;">Our Doctors</h2>${doctorsHtml()}</section>
   <section><h2 class="display" style="font-size:22px;">Recent from our blog</h2>${blogPreviewHtml()}</section>
+  </div>${publicFooter()}`;
+}
+function viewAbout(){
+  const i=state.data.info;
+  const welcomeParas = (i.welcomeText||'').split(/\n\n+/).filter(Boolean);
+  return `${publicHeader()}<div class="container">
+  <section style="max-width:720px;">
+    <h2 class="display">Welcome</h2>
+    ${welcomeParas.length? welcomeParas.map(p=>`<p style="color:var(--text-muted);">${escapeHtml(p)}</p>`).join('') : `<p style="color:var(--text-muted);">${escapeHtml(i.tagline)}</p>`}
+  </section>
+  <section class="grid grid-2" style="align-items:start;">
+    <div>
+      <h2 class="display">About us</h2>
+      <p style="color:var(--text-muted);">${escapeHtml(i.aboutUsText||'')}</p>
+    </div>
+    ${founderHtml(i)}
+  </section>
+  <section>
+    <h2 class="display">Find us</h2>
+    <div class="card">${findUsMapSvg()}</div>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:8px;">Illustrative map — not to scale.</p>
+  </section>
   </div>${publicFooter()}`;
 }
 function viewServices(){
@@ -667,6 +730,10 @@ function viewAdminInfo(){
         <div class="field" style="grid-column:1/-1;"><label>Tagline</label><input id="if-tagline" type="text" value="${escapeHtml(i.tagline)}"></div>
         <div class="field" style="grid-column:1/-1;"><label>Address</label><input id="if-address" type="text" value="${escapeHtml(i.address)}"></div>
         <div class="field"><label>Hours</label><input id="if-hours" type="text" value="${escapeHtml(i.hours)}"></div>
+        <div class="field" style="grid-column:1/-1;"><label>Welcome text (shown on the About page)</label><textarea id="if-welcome" rows="6">${escapeHtml(i.welcomeText||'')}</textarea></div>
+        <div class="field" style="grid-column:1/-1;"><label>About us / history</label><textarea id="if-about" rows="5">${escapeHtml(i.aboutUsText||'')}</textarea></div>
+        <div class="field"><label>Founder name</label><input id="if-founder-name" type="text" value="${escapeHtml(i.founderName||'')}"></div>
+        <div class="field"><label>Founder photo URL (optional)</label><input id="if-founder-photo" type="text" placeholder="https://…" value="${escapeHtml(i.founderPhotoUrl||'')}"></div>
       </div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
@@ -693,6 +760,7 @@ function render(){
   else{
     switch(state.view){
       case 'home': html=viewHome(); break;
+      case 'about': html=viewAbout(); break;
       case 'services': html=viewServices(); break;
       case 'blog': html=viewBlog(); break;
       case 'book': html=viewBook(); break;
