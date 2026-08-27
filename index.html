@@ -124,7 +124,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, orderBy, limit, startAt, startAfter, endAt, getCountFromServer, writeBatch
+  query, orderBy, limit, startAt, startAfter, endAt, getCountFromServer, writeBatch, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
@@ -186,9 +186,13 @@ let state = {
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
   patientCount:null,
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], info:DEFAULT_INFO }
+  visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
+  visitForm:{ patientQuery:'', patientResults:[], selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
+  editingVisit:null,
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
+let lastVisibleVisitDoc = null;
 
 /* ---------- clinic info ---------- */
 const infoRef = doc(db,'clinicInfo','main');
@@ -405,6 +409,126 @@ window.importPatientFile = async function(){
   }
 };
 
+/* ---------- patient visits ---------- */
+async function loadVisitsPage(reset){
+  state.visitsLoading = true; render();
+  const term = state.visitsSearchTerm.trim().toLowerCase();
+  try{
+    let q;
+    if(!term){
+      q = reset || !lastVisibleVisitDoc
+        ? query(collection(db,'visits'), orderBy('createdAtMillis','desc'), limit(50))
+        : query(collection(db,'visits'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleVisitDoc), limit(50));
+    }else{
+      q = reset || !lastVisibleVisitDoc
+        ? query(collection(db,'visits'), orderBy('patientNameLower'), startAt(term), endAt(term+''), limit(50))
+        : query(collection(db,'visits'), orderBy('patientNameLower'), startAfter(lastVisibleVisitDoc), endAt(term+''), limit(50));
+    }
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.visits = reset ? docs : state.data.visits.concat(docs);
+    lastVisibleVisitDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleVisitDoc;
+    state.hasMoreVisits = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load visits — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.visitsLoading = false; render();
+}
+window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); };
+window.loadMoreVisits = function(){ loadVisitsPage(false); };
+
+function resetVisitForm(){
+  state.editingVisit = null;
+  state.visitForm = { patientQuery:'', patientResults:[], selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] };
+}
+window.searchVisitPatient = async function(term){
+  state.visitForm.patientQuery = term;
+  const t = term.trim().toLowerCase();
+  if(!t){ state.visitForm.patientResults = []; render(); return; }
+  try{
+    const q = query(collection(db,'patients'), orderBy('nameLower'), startAt(t), endAt(t+''), limit(8));
+    const snap = await getDocs(q);
+    state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); }
+  render();
+};
+window.selectVisitPatient = function(id){
+  const p = state.visitForm.patientResults.find(x=>x.id===id);
+  if(p){ state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[]; }
+  render();
+};
+window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
+window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:''}); render(); };
+window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({medicineId:'',quantity:''}); render(); };
+window.updateVisitMedRow = function(idx,key,val){ state.visitForm.meds[idx][key]=val; };
+window.editVisit = function(id){
+  const v = state.data.visits.find(x=>x.id===id);
+  if(!v) return;
+  state.editingVisit = v;
+  state.visitForm = {
+    patientQuery:'', patientResults:[],
+    selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
+    date:v.date||todayISO(), reason:v.reason||'',
+    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity})) : [{medicineId:'',quantity:''}]
+  };
+  render(); window.scrollTo(0,0);
+};
+window.deleteVisit = async function(id){
+  const v = state.data.visits.find(x=>x.id===id);
+  if(!v) return;
+  if(!confirm('Delete this visit record? Any stock deducted for it will be restored to inventory.')) return;
+  const batch = writeBatch(db);
+  (v.medicines||[]).forEach(m=>{ if(m.medicineId && Number(m.quantity)) batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(Number(m.quantity))}); });
+  batch.delete(doc(db,'visits',id));
+  await batch.commit();
+  lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); render();
+};
+window.saveVisitForm = async function(){
+  const f = state.visitForm;
+  if(!f.selectedPatient){ showToast('Please select a patient for this visit.'); return; }
+  const date = document.getElementById('vf-date').value;
+  const reason = document.getElementById('vf-reason').value.trim();
+  if(!date){ showToast('Please choose a visit date.'); return; }
+  const medRows = f.meds.filter(m=>m.medicineId && Number(m.quantity)>0);
+  const medicines = medRows.map(m=>{
+    const med = state.data.medicines.find(x=>x.id===m.medicineId);
+    return { medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity) };
+  });
+  const data = {
+    patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
+    patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
+    date, reason, medicines
+  };
+  const batch = writeBatch(db);
+  if(state.editingVisit){
+    const before = state.editingVisit.medicines||[];
+    const beforeMap = Object.fromEntries(before.map(m=>[m.medicineId, Number(m.quantity)||0]));
+    const afterMap = Object.fromEntries(medicines.map(m=>[m.medicineId, Number(m.quantity)||0]));
+    const ids = new Set([...Object.keys(beforeMap), ...Object.keys(afterMap)]);
+    ids.forEach(id=>{
+      const delta = (afterMap[id]||0) - (beforeMap[id]||0);
+      if(delta) batch.update(doc(db,'medicines',id), {quantity:increment(-delta)});
+    });
+    batch.update(doc(db,'visits',state.editingVisit.id), data);
+  }else{
+    data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
+    const ref = doc(collection(db,'visits'));
+    batch.set(ref, data);
+    medicines.forEach(m=>{ batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(-m.quantity)}); });
+  }
+  try{
+    await batch.commit();
+  }catch(e){
+    console.error(e);
+    showToast('Could not save visit — check the browser console for details.');
+    return;
+  }
+  resetVisitForm();
+  lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
+  showToast('Visit saved.'); render();
+};
+
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
   const username=document.getElementById('admin-email').value.trim().toLowerCase();
@@ -438,6 +562,7 @@ window.setView = async function(v){
   if(v==='home'||v==='blog') await loadBlogPosts();
   if(v==='admin-dashboard') await loadDashboardStats();
   if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
+  if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
   render();
@@ -459,9 +584,10 @@ function pulseDivider(){
 function findUsMapSvg(){
   return `<svg class="roadmap-svg" viewBox="0 0 720 300" role="img" aria-label="Simple road map to St Joseph's Children's Clinic, Thodupuzha">
     <line x1="40" y1="140" x2="660" y2="140" stroke="var(--border)" stroke-width="6" stroke-linecap="round"/>
-    <text x="350" y="164" text-anchor="middle" class="mono" font-size="11" fill="var(--text-muted)" letter-spacing="0.06em">MUVATTUPUZHA ROAD</text>
+    <text x="350" y="164" text-anchor="middle" class="mono" font-size="11" fill="var(--text-muted)" letter-spacing="0.06em">MOUNT SINAI ROAD</text>
 
     <path d="M110 140 V84 L66 48" stroke="var(--border)" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <text x="120" y="108" class="mono" font-size="10" fill="var(--text-muted)" letter-spacing="0.04em">MUVATTUPUZHA ROAD</text>
     <circle cx="66" cy="48" r="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>
     <text x="80" y="44" class="mono" font-size="12" fill="var(--text)" font-weight="600">Bhima Jewellers</text>
 
@@ -598,7 +724,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-inventory','Medicine Inventory'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-inventory','Medicine Inventory'],
     ['admin-appointments','Appointment Requests'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -680,6 +806,66 @@ function viewAdminPatients(){
         : `<div class="empty-state"><div class="icon">🗂️</div>No patients match your search yet.</div>`}
     </div>
     ${(!state.patientsLoading && state.hasMorePatients) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMorePatients()">Load 50 more</button></div>` : ''}
+  `);
+}
+function viewAdminVisits(){
+  const f = state.visitForm;
+  const patientBlock = f.selectedPatient
+    ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><strong>${escapeHtml(f.selectedPatient.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedPatient.opdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(f.selectedPatient.phone||'')}</span></div>
+        <button class="btn btn-outline btn-small" onclick="clearVisitPatient()">Change</button>
+      </div>`
+    : `<div>
+        <input type="text" placeholder="Search patient by name…" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)">
+        ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
+      </div>`;
+  const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const medRows = f.meds.map((m,idx)=>`
+    <div class="form-grid" style="grid-template-columns:2fr 1fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Medicine</label>
+        <select onchange="updateVisitMedRow(${idx},'medicineId',this.value)">
+          <option value="">— Select —</option>
+          ${medOptions.map(x=>`<option value="${x.id}" ${m.medicineId===x.id?'selected':''}>${escapeHtml(x.name)} (${escapeHtml(String(x.quantity))} ${escapeHtml(x.unit||'')} in stock)</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateVisitMedRow(${idx},'quantity',this.value)"></div>
+      <button class="btn btn-outline btn-small" onclick="removeVisitMedRow(${idx})">Remove</button>
+    </div>`).join('');
+  const formCard = `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
+    <div class="field"><label>Patient</label>${patientBlock}</div>
+    <div class="form-grid">
+      <div class="field"><label>Visit date</label><input id="vf-date" type="date" value="${escapeHtml(f.date)}"></div>
+    </div>
+    <div class="field"><label>Reason for visit</label><textarea id="vf-reason" rows="2">${escapeHtml(f.reason)}</textarea></div>
+    <label>Prescribed medicines</label>
+    ${medRows}
+    <button class="btn btn-outline btn-small" onclick="addVisitMedRow()">+ Add medicine</button>
+    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Prescribing a medicine here deducts that quantity from Medicine Inventory automatically.</p>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveVisitForm()">${state.editingVisit?'Save changes':'Register visit'}</button>
+      ${state.editingVisit?`<button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>`:''}
+    </div>
+  </div>`;
+  const rows = state.data.visits.map(v=>`<tr>
+    <td class="mono">${escapeHtml(v.date)}</td>
+    <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
+    <td>${escapeHtml(v.reason||'')}</td>
+    <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button></td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Patient Visits</h2>
+    ${formCard}
+    <div class="search-row" style="margin-bottom:16px;">
+      <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)">
+    </div>
+    <div class="table-wrap">
+      ${state.visitsLoading? `<div class="empty-state">Loading…</div>` :
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
+    </div>
+    ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
   `);
 }
 function viewAdminInventory(){
@@ -767,6 +953,7 @@ function render(){
       case 'admin-login': html= state.isAdmin ? viewAdminDashboard() : viewAdminLogin(); break;
       case 'admin-dashboard': html=viewAdminDashboard(); break;
       case 'admin-patients': html=viewAdminPatients(); break;
+      case 'admin-visits': html=viewAdminVisits(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
       case 'admin-info': html=viewAdminInfo(); break;
