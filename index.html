@@ -155,6 +155,7 @@ function daysUntil(dateStr){
   return Math.round((d - new Date(new Date().toDateString())) / 86400000);
 }
 function escapeHtml(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function waLink(phone){ return 'https://wa.me/'+String(phone||'').replace(/[^0-9]/g,''); }
 
 const DEFAULT_INFO = {
   clinicName: "St Joseph's Children's & Diabetic Clinic",
@@ -167,9 +168,9 @@ const DEFAULT_INFO = {
   founderName: "Founder Dr M M Varkey",
   founderPhotoUrl: "",
   doctors: [
-    { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician" },
-    { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant" },
-    { name: "Dr. Ranjith Varkey Joseph", qualification: "BSc, MBBS, MRCP", role: "Online Consultation" }
+    { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
+    { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
+    { name: "Dr. Ranjith Varkey Joseph", qualification: "BSc, MBBS, MRCP", role: "Online Consultation", whatsapp: "+447792402860", email: "docrvjoseph@gmail.com" }
   ],
   services: [
     { name: "Pediatric Consultation", description: "General child health checkups, growth monitoring, and vaccinations." },
@@ -229,12 +230,14 @@ function doctorEditor(items){
         <div class="field"><label>Name</label><input type="text" value="${escapeHtml(d.name)}" onchange="updateDoctor(${idx},'name',this.value)"></div>
         <div class="field"><label>Qualification</label><input type="text" value="${escapeHtml(d.qualification||'')}" onchange="updateDoctor(${idx},'qualification',this.value)"></div>
         <div class="field"><label>Role</label><input type="text" value="${escapeHtml(d.role||'')}" onchange="updateDoctor(${idx},'role',this.value)"></div>
+        <div class="field"><label>WhatsApp number (with country code)</label><input type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(d.whatsapp||'')}" onchange="updateDoctor(${idx},'whatsapp',this.value)"></div>
+        <div class="field"><label>Email</label><input type="email" value="${escapeHtml(d.email||'')}" onchange="updateDoctor(${idx},'email',this.value)"></div>
       </div>
       <button class="btn btn-danger btn-small" onclick="removeDoctor(${idx})">Remove</button>
     </div>`).join('');
   return `${rows}<button class="btn btn-outline btn-small" onclick="addDoctor()">+ Add doctor</button>`;
 }
-window.addDoctor = function(){ (state.data.info.doctors=state.data.info.doctors||[]).push({name:'New Doctor',qualification:'',role:''}); setDoc(infoRef,state.data.info); render(); };
+window.addDoctor = function(){ (state.data.info.doctors=state.data.info.doctors||[]).push({name:'New Doctor',qualification:'',role:'',whatsapp:'',email:''}); setDoc(infoRef,state.data.info); render(); };
 window.removeDoctor = function(idx){ state.data.info.doctors.splice(idx,1); setDoc(infoRef,state.data.info); render(); };
 window.updateDoctor = function(idx,key,val){ state.data.info.doctors[idx][key]=val; setDoc(infoRef,state.data.info); };
 function listEditor(field, items){
@@ -643,7 +646,18 @@ function publicFooter(){
 function doctorsHtml(){
   const docs=state.data.info.doctors||[];
   if(!docs.length) return `<div class="empty-state"><div class="icon">🩺</div>Doctor details will appear here once added by clinic staff.</div>`;
-  return `<div class="grid grid-3">${docs.map(d=>`<div class="service-card"><h3>${escapeHtml(d.name)}</h3><p style="margin-bottom:4px;">${escapeHtml(d.qualification)}</p><p style="color:var(--accent);font-weight:600;">${escapeHtml(d.role)}</p></div>`).join('')}</div>`;
+  return `<div class="grid grid-3">${docs.map(d=>{
+    const hasContact = d.whatsapp || d.email;
+    return `<div class="service-card">
+      <h3>${escapeHtml(d.name)}</h3>
+      <p style="margin-bottom:4px;">${escapeHtml(d.qualification)}</p>
+      <p style="color:var(--accent);font-weight:600;${hasContact?'margin-bottom:12px;':'margin-bottom:0;'}">${escapeHtml(d.role)}</p>
+      ${hasContact?`<div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${d.whatsapp?`<a class="btn btn-outline btn-small" href="${waLink(d.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>`:''}
+        ${d.email?`<a class="btn btn-outline btn-small" href="mailto:${escapeHtml(d.email)}">Email</a>`:''}
+      </div>`:''}
+    </div>`;
+  }).join('')}</div>`;
 }
 function blogPreviewHtml(){
   const posts=state.data.blogPosts.slice(0,3);
