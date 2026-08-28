@@ -370,6 +370,34 @@ window.savePatientForm = async function(){
   lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
   showToast('Patient saved.');
 };
+function parseCsvText(text){
+  if(text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
+      else field += c;
+    }else{
+      if(c==='"') inQuotes = true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n' || c==='\r'){
+        if(c==='\r' && text[i+1]==='\n') i++;
+        row.push(field); field=''; rows.push(row); row=[];
+      }else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  const filtered = rows.filter(r => r.length>1 || (r.length===1 && r[0]!==''));
+  if(!filtered.length) return [];
+  const headers = filtered[0].map(h=>h.trim());
+  return filtered.slice(1).map(r=>{
+    const obj = {};
+    headers.forEach((h,idx)=>{ obj[h] = (r[idx]??'').trim(); });
+    return obj;
+  });
+}
 window.importPatientFile = async function(){
   const fileInput = document.getElementById('import-file');
   const statusEl = document.getElementById('import-status');
@@ -385,10 +413,16 @@ window.importPatientFile = async function(){
       }
     }
     statusEl.textContent = 'Reading file…';
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, {type:'array'});
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-    let batch = writeBatch(db), opCount=0, validSeen=0, uploaded=0, skipped=0;
+    const isCsv = /\.csv$/i.test(file.name) || file.type==='text/csv';
+    let rows;
+    if(isCsv){
+      rows = parseCsvText(await file.text());
+    }else{
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, {type:'array'});
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+    }
+    let validSeen=0, uploaded=0, skipped=0, failed=0;
     for(const r of rows){
       const opdNo = String(r.OPregNos ?? r.opdNo ?? '').trim();
       const name = String(r.PatientName ?? r.name ?? '').trim();
@@ -396,19 +430,22 @@ window.importPatientFile = async function(){
       validSeen++;
       if(validSeen<=resumeFrom) continue;
       const address = String(r.Address ?? '').trim();
-      const ref = doc(collection(db,'patients'));
-      batch.set(ref, {
-        opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
-        phone:String(r.PhoneNo ?? '').trim(), gender:String(r.Gender ?? '').trim(), age:String(r.Age ?? '').trim(),
-        address, addressLower:address.toLowerCase(),
-        registeredAtMillis: Date.now(), registeredAt: new Date().toISOString()
-      });
-      opCount++; uploaded++;
-      if(opCount===450){ await batch.commit(); batch=writeBatch(db); opCount=0; statusEl.textContent = `Uploaded ${resumeFrom+uploaded} of ${rows.length}…`; }
+      try{
+        await addDoc(collection(db,'patients'), {
+          opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
+          phone:String(r.PhoneNo ?? '').trim(), gender:String(r.Gender ?? '').trim(), age:String(r.Age ?? '').trim(),
+          address, addressLower:address.toLowerCase(),
+          registeredAtMillis: Date.now(), registeredAt: new Date().toISOString()
+        });
+        uploaded++;
+      }catch(rowErr){
+        console.error('Row failed at OPD no.', opdNo, rowErr);
+        failed++;
+      }
+      statusEl.textContent = `Uploaded ${resumeFrom+uploaded+failed} of ${rows.length}…`;
     }
-    if(opCount>0) await batch.commit();
     statusEl.textContent = '';
-    showToast(`Import complete: ${uploaded} uploaded${resumeFrom?` (resumed after row ${resumeFrom})`:''}, ${skipped} skipped (missing OPD no. or name).`);
+    showToast(`Import complete: ${uploaded} uploaded${resumeFrom?` (resumed after row ${resumeFrom})`:''}, ${skipped} skipped (missing OPD no. or name)${failed?`, ${failed} failed (see console)`:''}.`);
     lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
   }catch(e){
     console.error(e);
