@@ -130,7 +130,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, orderBy, limit, startAt, startAfter, endAt, getCountFromServer, writeBatch, increment
+  query, where, orderBy, limit, startAt, startAfter, endAt, getCountFromServer, writeBatch, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
@@ -363,6 +363,12 @@ window.savePatientForm = async function(){
   const age=document.getElementById('pf-age').value;
   const address=document.getElementById('pf-address').value.trim();
   if(!name || !opdNo){ showToast('OPD number and patient name are required.'); return; }
+  const dupSnap = await getDocs(query(collection(db,'patients'), where('opdNo','==',opdNo), limit(1)));
+  const dup = dupSnap.docs[0];
+  if(dup && (!state.editingPatient || dup.id!==state.editingPatient.id)){
+    showToast(`OPD No. ${opdNo} is already registered to ${dup.data().name}. Please use a different number.`);
+    return;
+  }
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
     phone, gender, age, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
@@ -439,7 +445,22 @@ window.importPatientFile = async function(){
       const wb = XLSX.read(data, {type:'array'});
       rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
     }
-    let validSeen=0, uploaded=0, skipped=0, failed=0;
+    statusEl.textContent = 'Checking existing OPD numbers…';
+    const existingOpdNos = new Set();
+    {
+      let lastDoc = null;
+      while(true){
+        const q = lastDoc
+          ? query(collection(db,'patients'), orderBy('opdNo'), startAfter(lastDoc), limit(1000))
+          : query(collection(db,'patients'), orderBy('opdNo'), limit(1000));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d=>{ const v=(d.data().opdNo||'').trim(); if(v) existingOpdNos.add(v); });
+        if(snap.docs.length < 1000) break;
+        lastDoc = snap.docs[snap.docs.length-1];
+        statusEl.textContent = `Checking existing OPD numbers… (${existingOpdNos.size} found so far)`;
+      }
+    }
+    let validSeen=0, uploaded=0, skipped=0, failed=0, duplicate=0;
     let batch = writeBatch(db), pending = [];
     const IMPORT_BATCH_SIZE = 20;
     async function flushBatch(){
@@ -461,7 +482,7 @@ window.importPatientFile = async function(){
       }
       batch = writeBatch(db);
       pending = [];
-      statusEl.textContent = `Uploaded ${resumeFrom+uploaded+failed} of ${rows.length}…`;
+      statusEl.textContent = `Uploaded ${resumeFrom+uploaded+failed+duplicate} of ${rows.length}…`;
     }
     for(const r of rows){
       const opdNo = String(r.OPregNos ?? r.opdNo ?? '').trim();
@@ -469,6 +490,12 @@ window.importPatientFile = async function(){
       if(!opdNo || !name){ skipped++; continue; }
       validSeen++;
       if(validSeen<=resumeFrom) continue;
+      if(existingOpdNos.has(opdNo)){
+        console.warn('Duplicate OPD no. skipped:', opdNo, name);
+        duplicate++;
+        continue;
+      }
+      existingOpdNos.add(opdNo);
       const address = String(r.Address ?? '').trim();
       const data = {
         opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
@@ -482,7 +509,7 @@ window.importPatientFile = async function(){
     }
     await flushBatch();
     statusEl.textContent = '';
-    showToast(`Import complete: ${uploaded} uploaded${resumeFrom?` (resumed after row ${resumeFrom})`:''}, ${skipped} skipped (missing OPD no. or name)${failed?`, ${failed} failed (see console)`:''}.`);
+    showToast(`Import complete: ${uploaded} uploaded${resumeFrom?` (resumed after row ${resumeFrom})`:''}, ${skipped} skipped (missing OPD no. or name), ${duplicate} duplicate OPD no. skipped${failed?`, ${failed} failed (see console)`:''}.`);
     lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
   }catch(e){
     console.error(e);
@@ -902,6 +929,7 @@ function viewAdminPatients(){
       <input id="import-resume" type="number" min="0" value="0">
     </div>
     <p style="color:var(--text-muted);font-size:12px;margin:6px 0 0;">If an import stopped partway (e.g. status showed "Uploaded 19800 of…"), re-select the <em>same file</em> and enter that number here — rows already uploaded will be skipped so you don't get duplicates.</p>
+    <p style="color:var(--text-muted);font-size:12px;margin:4px 0 0;">Rows whose OPD No. is already registered (in the database, or earlier in this same file) are skipped automatically — OPD No. can never be duplicated.</p>
     <div class="row-actions" style="margin-top:10px;"><button class="btn btn-accent" onclick="importPatientFile()">Import file</button></div>
     <div id="import-status" style="margin-top:10px;font-size:13px;color:var(--text-muted);"></div>
   </div>`;
