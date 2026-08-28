@@ -192,7 +192,7 @@ let state = {
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
-  patientCount:null,
+  patientCount:null, visitCount:null,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
@@ -565,8 +565,9 @@ if(isIos && !isStandalone){
 async function loadDashboardStats(){
   try{ state.patientCount = (await getCountFromServer(collection(db,'patients'))).data().count; }
   catch(e){ state.patientCount = null; }
+  try{ state.visitCount = (await getCountFromServer(collection(db,'visits'))).data().count; }
+  catch(e){ state.visitCount = null; }
   await loadMedicines();
-  await loadAppointments();
 }
 
 /* ---------- toast / router ---------- */
@@ -770,17 +771,12 @@ function adminShell(content){
 }
 function viewAdminDashboard(){
   const meds=state.data.medicines;
-  const low=meds.filter(m=>Number(m.quantity)<=Number(m.reorderLevel||0)).length;
-  const expiring=meds.filter(m=>{const d=daysUntil(m.expiry); return d!==null && d<=30;}).length;
-  const pendingAp=state.data.appointments.filter(a=>a.status==='pending').length;
   return adminShell(`
     <h2 class="display">Overview</h2>
     <div class="stat-row">
       <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
-      <div class="stat-card"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-inventory')"><div class="num">${low}</div><div class="label">Low stock items</div></div>
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-inventory')"><div class="num">${expiring}</div><div class="label">Expiring within 30 days</div></div>
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-appointments')"><div class="num">${pendingAp}</div><div class="label">Pending appointment requests</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
     <p style="color:var(--text-muted);font-size:14px;">Data is stored in your clinic's own Firebase project, accessible from any device where staff log in. Not a HIPAA/DPDP-compliant medical records system — treat it as an internal working tool.</p>
   `);
