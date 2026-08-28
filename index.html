@@ -525,8 +525,20 @@ window.tryAdminLogin = async function(){
     render();
   }
 };
-window.adminLogout = async function(){ await signOut(auth); setView('home'); };
-onAuthStateChanged(auth, (user)=>{ state.isAdmin = !!user; render(); });
+window.adminLogout = async function(){
+  await signOut(auth);
+  try{ localStorage.removeItem('lastAdminView'); }catch(e){}
+  setView('home');
+};
+onAuthStateChanged(auth, (user)=>{
+  state.isAdmin = !!user;
+  if(user && state.view==='home'){
+    let savedView = null;
+    try{ savedView = localStorage.getItem('lastAdminView'); }catch(e){}
+    if(savedView && savedView.startsWith('admin-') && savedView!=='admin-login'){ setView(savedView); return; }
+  }
+  render();
+});
 
 /* ---------- PWA install ---------- */
 let deferredInstallPrompt = null;
@@ -568,9 +580,9 @@ if(isIos && !isStandalone){
 /* ---------- dashboard ---------- */
 async function loadDashboardStats(){
   try{ state.patientCount = (await getCountFromServer(collection(db,'patients'))).data().count; }
-  catch(e){ state.patientCount = null; }
+  catch(e){ console.error('Failed to load registered patient count', e); state.patientCount = null; }
   try{ state.visitCount = (await getCountFromServer(collection(db,'visits'))).data().count; }
-  catch(e){ state.visitCount = null; }
+  catch(e){ console.error('Failed to load patient visit count', e); state.visitCount = null; }
   await loadMedicines();
 }
 
@@ -579,6 +591,7 @@ function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast
 window.setView = async function(v){
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  if(v.startsWith('admin-') && v!=='admin-login'){ try{ localStorage.setItem('lastAdminView', v); }catch(e){} }
   render(); window.scrollTo(0,0);
   if(v==='home'||v==='blog') await loadBlogPosts();
   if(v==='admin-dashboard') await loadDashboardStats();
