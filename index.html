@@ -193,6 +193,7 @@ let state = {
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
   patientCount:null, visitCount:null,
+  showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
@@ -292,6 +293,7 @@ window.saveMedForm = async function(){
   const data={name,batch,expiry,quantity,unit,reorderLevel,updatedAt:new Date().toISOString()};
   if(state.editingMed){ await updateDoc(doc(db,'medicines',state.editingMed.id), data); state.editingMed=null; }
   else{ await addDoc(collection(db,'medicines'), data); }
+  state.showMedForm=false;
   await loadMedicines(); showToast('Inventory updated.'); render();
 };
 
@@ -375,6 +377,7 @@ window.savePatientForm = async function(){
     phone, gender, age, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
   else{ await addDoc(collection(db,'patients'), data); }
+  state.showPatientForm=false;
   lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
   showToast('Patient saved.');
 };
@@ -410,6 +413,7 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 
 function resetVisitForm(){
   state.editingVisit = null;
+  state.showVisitForm = false;
   state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] };
 }
 window.setVisitPatientSearchField = function(field){
@@ -574,6 +578,7 @@ async function loadDashboardStats(){
 function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=''; render(); }, 3000); }
 window.setView = async function(v){
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
   render(); window.scrollTo(0,0);
   if(v==='home'||v==='blog') await loadBlogPosts();
   if(v==='admin-dashboard') await loadDashboardStats();
@@ -783,7 +788,8 @@ function viewAdminDashboard(){
 }
 function viewAdminPatients(){
   const p=state.editingPatient;
-  const formCard=`<div class="card" style="margin-bottom:20px;">
+  const showForm = p || state.showPatientForm;
+  const formCard=!showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showPatientForm=true; render();">+ New OPD registration</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${p?'Edit patient':'New OPD registration'}</h3>
     <div class="form-grid">
       <div class="field"><label>OPD No.</label><input id="pf-opd" type="text" value="${escapeHtml(p?p.opdNo:state.nextOpdNoCache)}"></div>
@@ -795,7 +801,7 @@ function viewAdminPatients(){
     </div>
     <div class="row-actions" style="margin-top:6px;">
       <button class="btn btn-primary" onclick="savePatientForm()">${p?'Save changes':'Register patient'}</button>
-      ${p?`<button class="btn btn-outline" onclick="state.editingPatient=null; render();">Cancel</button>`:''}
+      <button class="btn btn-outline" onclick="state.editingPatient=null; state.showPatientForm=false; render();">Cancel</button>
     </div></div>`;
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
@@ -851,7 +857,8 @@ function viewAdminVisits(){
       <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateVisitMedRow(${idx},'quantity',this.value)"></div>
       <button class="btn btn-outline btn-small" onclick="removeVisitMedRow(${idx})">Remove</button>
     </div>`).join('');
-  const formCard = `<div class="card" style="margin-bottom:20px;">
+  const showForm = state.editingVisit || state.showVisitForm;
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
     <div class="form-grid">
@@ -864,7 +871,7 @@ function viewAdminVisits(){
     <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Prescribing a medicine here deducts that quantity from Medicine Inventory automatically.</p>
     <div class="row-actions" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveVisitForm()">${state.editingVisit?'Save changes':'Register visit'}</button>
-      ${state.editingVisit?`<button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>`:''}
+      <button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>
     </div>
   </div>`;
   const rows = state.data.visits.map(v=>`<tr>
@@ -892,7 +899,8 @@ function viewAdminInventory(){
   const m=state.editingMed;
   const search=state.medSearch.toLowerCase();
   const list=state.data.medicines.filter(x=>!search||x.name.toLowerCase().includes(search)||(x.batch||'').toLowerCase().includes(search));
-  const formCard=`<div class="card" style="margin-bottom:20px;">
+  const showForm = m || state.showMedForm;
+  const formCard=!showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showMedForm=true; render();">+ Add medicine</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${m?'Edit medicine':'Add medicine to inventory'}</h3>
     <div class="form-grid">
       <div class="field"><label>Medicine name</label><input id="mf-name" type="text" value="${escapeHtml(m?m.name:'')}"></div>
@@ -904,7 +912,7 @@ function viewAdminInventory(){
     </div>
     <div class="row-actions" style="margin-top:6px;">
       <button class="btn btn-primary" onclick="saveMedForm()">${m?'Save changes':'Add to inventory'}</button>
-      ${m?`<button class="btn btn-outline" onclick="state.editingMed=null; render();">Cancel</button>`:''}
+      <button class="btn btn-outline" onclick="state.editingMed=null; state.showMedForm=false; render();">Cancel</button>
     </div></div>`;
   const rows=list.map(x=>{const s=medStatus(x); return `<tr>
     <td>${escapeHtml(x.name)}</td><td class="mono">${escapeHtml(x.batch)}</td><td class="mono">${escapeHtml(x.expiry)}</td>
