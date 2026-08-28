@@ -194,7 +194,7 @@ let state = {
   medSearch:'', editingPatient:null, editingMed:null,
   patientCount:null,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], info:DEFAULT_INFO }
 };
@@ -410,14 +410,22 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 
 function resetVisitForm(){
   state.editingVisit = null;
-  state.visitForm = { patientQuery:'', patientResults:[], selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] };
 }
+window.setVisitPatientSearchField = function(field){
+  state.visitForm.patientSearchField = field;
+  state.visitForm.patientQuery = '';
+  state.visitForm.patientResults = [];
+  render();
+};
 window.searchVisitPatient = async function(term){
   state.visitForm.patientQuery = term;
   const t = term.trim().toLowerCase();
   if(!t){ state.visitForm.patientResults = []; render(); return; }
   try{
-    const q = query(collection(db,'patients'), orderBy('nameLower'), startAt(t), endAt(t+''), limit(8));
+    const fieldName = state.visitForm.patientSearchField==='opdNo' ? 'opdNo' : 'nameLower';
+    const value = fieldName==='opdNo' ? term.trim() : t;
+    const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); }
@@ -437,7 +445,7 @@ window.editVisit = function(id){
   if(!v) return;
   state.editingVisit = v;
   state.visitForm = {
-    patientQuery:'', patientResults:[],
+    patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'',
     meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity})) : [{medicineId:'',quantity:''}]
@@ -826,7 +834,13 @@ function viewAdminVisits(){
         <button class="btn btn-outline btn-small" onclick="clearVisitPatient()">Change</button>
       </div>`
     : `<div>
-        <input type="text" placeholder="Search patient by name…" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)">
+        <div class="search-row">
+          <select onchange="setVisitPatientSearchField(this.value)">
+            <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
+            <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
+          </select>
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)">
+        </div>
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
