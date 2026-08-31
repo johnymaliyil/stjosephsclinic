@@ -198,7 +198,7 @@ let state = {
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
-  billForm:{ visitQuery:'', visitResults:[], selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] },
+  billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] },
   billingPrefillVisit:null,
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
 };
@@ -547,8 +547,14 @@ window.loadMoreBills = function(){ loadBillsPage(false); };
 
 function resetBillForm(){
   state.showBillForm = false;
-  state.billForm = { visitQuery:'', visitResults:[], selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] };
+  state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] };
 }
+window.setBillVisitSearchField = function(field){
+  state.billForm.visitSearchField = field;
+  state.billForm.visitQuery = '';
+  state.billForm.visitResults = [];
+  render();
+};
 function medItemsFromVisit(visit){
   return (visit.medicines||[]).map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
@@ -560,7 +566,9 @@ window.searchBillVisit = async function(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.billForm.visitResults = []; render(); return; }
   try{
-    const q = query(collection(db,'visits'), orderBy('patientNameLower'), startAt(t), endAt(t+''), limit(8));
+    const fieldName = state.billForm.visitSearchField==='opdNo' ? 'patientOpdNo' : 'patientNameLower';
+    const value = fieldName==='patientOpdNo' ? term.trim() : t;
+    const q = query(collection(db,'visits'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); }
@@ -1129,8 +1137,14 @@ function viewAdminBilling(){
         <button class="btn btn-outline btn-small" onclick="clearBillVisit()">Change</button>
       </div>`
     : `<div>
-        <input type="text" placeholder="Search patient by name to find their visit…" value="${escapeHtml(f.visitQuery)}" oninput="searchBillVisit(this.value)">
-        ${f.visitResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.visitResults.map(v=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectBillVisit('${v.id}')"><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.date||'')} ${v.billId?'<span class="badge badge-warn">Already billed</span>':''}</div>`).join('')}</div>` : ''}
+        <div class="search-row">
+          <select onchange="setBillVisitSearchField(this.value)">
+            <option value="name" ${f.visitSearchField==='name'?'selected':''}>Search by Name</option>
+            <option value="opdNo" ${f.visitSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
+          </select>
+          <input type="text" placeholder="${f.visitSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.visitQuery)}" oninput="searchBillVisit(this.value)">
+        </div>
+        ${f.visitResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.visitResults.map(v=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectBillVisit('${v.id}')"><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.date||'')} ${v.billId?'<span class="badge badge-warn">Already billed</span>':''}</div>`).join('')}</div>` : (f.visitQuery.trim() ? `<p style="color:var(--text-muted);font-size:13px;margin-top:6px;">No matching visit found. Make sure a visit has been registered and saved for this patient first (Patient Visits → Register visit).</p>` : '')}
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
   const medRows = f.medItems.map((m,idx)=>`
