@@ -167,6 +167,7 @@ const DEFAULT_INFO = {
   aboutUsText: "St. Joseph's Hospital and Children's Clinic, Thodupuzha was started in the year 1950 by Late Dr. M. M. Varkey, MBBS. He started a nursing home and served the people of Thodupuzha for more than 25 years. The confidence and trust of his patients, his very hard work, and his tenacity of purpose along with the goodwill of friends and relatives helped us through. We thank God for all His mercies and guidance over the years.",
   founderName: "Founder Dr M M Varkey",
   founderPhotoUrl: "",
+  upiId: "",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
@@ -198,7 +199,7 @@ let state = {
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
-  billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] },
+  billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
 };
@@ -224,6 +225,7 @@ window.saveClinicInfo = async function(){
   i.aboutUsText = document.getElementById('if-about').value.trim();
   i.founderName = document.getElementById('if-founder-name').value.trim();
   i.founderPhotoUrl = document.getElementById('if-founder-photo').value.trim();
+  i.upiId = document.getElementById('if-upi').value.trim();
   await setDoc(infoRef, i);
   showToast('Clinic info saved.');
 };
@@ -547,7 +549,7 @@ window.loadMoreBills = function(){ loadBillsPage(false); };
 
 function resetBillForm(){
   state.showBillForm = false;
-  state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] };
+  state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' };
 }
 window.setBillVisitSearchField = function(field){
   state.billForm.visitSearchField = field;
@@ -634,6 +636,7 @@ window.saveBillForm = async function(){
     patientOpdNo:v.patientOpdNo||'', patientPhone:v.patientPhone||'', visitDate:v.date||'',
     medItems, extraItems, consultationFee:totals.consultationFee,
     medTotal:totals.medTotal, extraTotal:totals.extraTotal, grandTotal:totals.grandTotal,
+    paymentMethod: f.paymentMethod==='upi' ? 'upi' : 'cash',
     date:todayISO(), createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
   let ref;
@@ -684,6 +687,16 @@ function printBill(b){
     ...b.extraItems.map(x=>`<tr><td>${escapeHtml(x.description)}</td><td class="r">1</td><td class="r">${money(x.amount)}</td><td class="r">${money(x.amount)}</td></tr>`),
     b.consultationFee?`<tr><td>Consultation fee</td><td class="r">1</td><td class="r">${money(b.consultationFee)}</td><td class="r">${money(b.consultationFee)}</td></tr>`:''
   ].join('');
+  const upiSection = (b.paymentMethod==='upi' && i.upiId) ? (()=>{
+    const upiLink = `upi://pay?pa=${encodeURIComponent(i.upiId)}&pn=${encodeURIComponent(i.clinicName)}&am=${encodeURIComponent(b.grandTotal.toFixed(2))}&cu=INR&tn=${encodeURIComponent('Bill '+b.billNumber)}`;
+    const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiLink)}`;
+    return `<div style="margin-top:20px;padding-top:16px;border-top:1px dashed #C08A3E;text-align:center;">
+      <div class="muted" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Pay via UPI</div>
+      <img src="${qrImg}" width="180" height="180" alt="UPI payment QR code" style="display:block;margin:0 auto;">
+      <div style="margin-top:8px;font-size:14px;">Scan with any UPI app, or pay to <strong>${escapeHtml(i.upiId)}</strong></div>
+      <div style="margin-top:2px;font-size:13px;color:#736F64;">Amount: ${money(b.grandTotal)}</div>
+    </div>`;
+  })() : '';
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill ${b.billNumber}</title>
   <style>
     body{font-family:Georgia,'Times New Roman',serif;color:#262420;max-width:640px;margin:32px auto;padding:0 20px;}
@@ -713,6 +726,8 @@ function printBill(b){
     <tr><td>Subtotal</td><td class="r">${money(b.medTotal+b.extraTotal+b.consultationFee)}</td></tr>
     <tr class="grand"><td>Total</td><td class="r">${money(b.grandTotal)}</td></tr>
   </table>
+  <p style="font-size:13px;margin-top:6px;">Payment method: <strong>${b.paymentMethod==='upi'?'UPI':'Cash'}</strong></p>
+  ${upiSection}
   <p class="muted" style="margin-top:30px;">Thank you.</p>
   </body></html>`;
   const w = window.open('', '_blank');
@@ -1176,6 +1191,14 @@ function viewAdminBilling(){
     ${extraRows}
     <button class="btn btn-outline btn-small" onclick="addBillExtraItem()">+ Add item</button>
     <div class="field" style="max-width:220px;margin-top:16px;"><label>Consultation fee (₹)</label><input id="bf-consultation" type="number" min="0" step="0.01" value="${escapeHtml(f.consultationFee)}" onchange="state.billForm.consultationFee=this.value; render();"></div>
+    <div class="field" style="max-width:280px;">
+      <label>Payment method</label>
+      <div style="display:flex;gap:16px;padding-top:4px;">
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod!=='upi'?'checked':''} onchange="state.billForm.paymentMethod='cash'; render();"> Cash</label>
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod==='upi'?'checked':''} onchange="state.billForm.paymentMethod='upi'; render();"> UPI</label>
+      </div>
+      ${f.paymentMethod==='upi' && !state.data.info.upiId ? `<p style="color:var(--danger);font-size:12px;margin:6px 0 0;">No UPI ID set yet — add one in Clinic Info to show a payment QR code on the bill.</p>` : ''}
+    </div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:right;">
       <div style="color:var(--text-muted);font-size:13px;">Medicines ₹${totals.medTotal.toFixed(2)} + Services ₹${totals.extraTotal.toFixed(2)} + Consultation ₹${totals.consultationFee.toFixed(2)}</div>
       <div class="display" style="font-size:22px;color:var(--primary-dark);">Total: ₹${totals.grandTotal.toFixed(2)}</div>
@@ -1261,6 +1284,7 @@ function viewAdminInfo(){
         <div class="field" style="grid-column:1/-1;"><label>About us / history</label><textarea id="if-about" rows="5">${escapeHtml(i.aboutUsText||'')}</textarea></div>
         <div class="field"><label>Founder name</label><input id="if-founder-name" type="text" value="${escapeHtml(i.founderName||'')}"></div>
         <div class="field"><label>Founder photo URL (optional)</label><input id="if-founder-photo" type="text" placeholder="https://…" value="${escapeHtml(i.founderPhotoUrl||'')}"></div>
+        <div class="field"><label>UPI ID (for bill payments)</label><input id="if-upi" type="text" placeholder="yourname@bank" value="${escapeHtml(i.upiId||'')}"></div>
       </div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
