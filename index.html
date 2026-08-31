@@ -216,6 +216,7 @@ let state = {
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
+  backupExporting:'',
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
@@ -880,6 +881,97 @@ function reportByDay(bills){
   return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
 }
 
+/* ---------- backup / export ---------- */
+async function fetchAllDocs(collectionName, orderField, onProgress){
+  if(!orderField){
+    const snap = await getDocs(collection(db,collectionName));
+    const results = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(onProgress) onProgress(results.length);
+    return results;
+  }
+  const results = [];
+  let lastDoc = null;
+  while(true){
+    const q = lastDoc
+      ? query(collection(db,collectionName), orderBy(orderField), startAfter(lastDoc), limit(1000))
+      : query(collection(db,collectionName), orderBy(orderField), limit(1000));
+    const snap = await getDocs(q);
+    snap.docs.forEach(d=>results.push({id:d.id, ...d.data()}));
+    if(onProgress) onProgress(results.length);
+    if(snap.docs.length < 1000) break;
+    lastDoc = snap.docs[snap.docs.length-1];
+  }
+  return results;
+}
+function csvEscape(v){
+  const s = (v===undefined||v===null)?'':String(v);
+  return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function toCSV(rows, columns){
+  const header = columns.map(c=>csvEscape(c.label)).join(',');
+  const lines = rows.map(r=>columns.map(c=>csvEscape(typeof c.value==='function'?c.value(r):r[c.value])).join(','));
+  return [header, ...lines].join('\r\n');
+}
+function downloadCSV(filename, csv){
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+async function runExport(label, collectionName, orderField, columns, filenamePrefix){
+  if(state.backupExporting) return;
+  state.backupExporting = label; render();
+  try{
+    const rows = await fetchAllDocs(collectionName, orderField, (n)=>{ state.backupExporting = `${label} (${n} so far)…`; render(); });
+    const csv = toCSV(rows, columns);
+    downloadCSV(`${filenamePrefix}-${todayISO()}.csv`, csv);
+    showToast(`Downloaded ${rows.length} ${label.toLowerCase()}.`);
+  }catch(e){
+    console.error(e);
+    showToast(`Could not export ${label.toLowerCase()} — check the browser console for details.`);
+  }
+  state.backupExporting = ''; render();
+}
+window.exportPatients = function(){
+  runExport('Patients', 'patients', 'registeredAtMillis', [
+    {label:'OPD No.', value:'opdNo'}, {label:'Name', value:'name'}, {label:'Address', value:'address'},
+    {label:'Phone', value:'phone'}, {label:'Gender', value:'gender'}, {label:'Age', value:'age'},
+    {label:'Registered At', value:'registeredAt'}
+  ], 'patients');
+};
+window.exportVisits = function(){
+  runExport('Patient visits', 'visits', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'}, {label:'OPD No.', value:'patientOpdNo'},
+    {label:'Phone', value:'patientPhone'}, {label:'Doctor', value:'doctorName'}, {label:'Reason', value:'reason'},
+    {label:'Medicines', value:v=>(v.medicines||[]).map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
+    {label:'Billed', value:v=>v.billId?'Yes':'No'}
+  ], 'patient-visits');
+};
+window.exportBills = function(){
+  runExport('Bills', 'bills', 'createdAtMillis', [
+    {label:'Bill No.', value:'billNumber'}, {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'},
+    {label:'OPD No.', value:'patientOpdNo'}, {label:'Phone', value:'patientPhone'},
+    {label:'Medicines Total', value:'medTotal'}, {label:'Services Total', value:'extraTotal'},
+    {label:'Consultation Fee', value:'consultationFee'}, {label:'Total', value:'grandTotal'},
+    {label:'Payment Method', value:b=>b.paymentMethod==='upi'?'UPI':'Cash'}
+  ], 'bills');
+};
+window.exportMedicines = function(){
+  runExport('Medicine inventory', 'medicines', null, [
+    {label:'Name', value:'name'}, {label:'Batch', value:'batch'}, {label:'Expiry', value:'expiry'},
+    {label:'Quantity', value:'quantity'}, {label:'Unit', value:'unit'}, {label:'Reorder Level', value:'reorderLevel'},
+    {label:'Price', value:'price'}
+  ], 'medicine-inventory');
+};
+window.exportAppointments = function(){
+  runExport('Appointment requests', 'appointments', null, [
+    {label:'Name', value:'name'}, {label:'Phone', value:'phone'}, {label:'Preferred Date', value:'date'},
+    {label:'Reason', value:'reason'}, {label:'Status', value:'status'}, {label:'Requested At', value:'createdAt'}
+  ], 'appointment-requests');
+};
+
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
   const username=document.getElementById('admin-email').value.trim().toLowerCase();
@@ -1150,7 +1242,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
-    ['admin-appointments','Appointment Requests'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -1454,6 +1546,34 @@ function viewAdminAppointments(){
   return adminShell(`<h2 class="display">Appointment Requests</h2>
     <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
 }
+function viewAdminBackup(){
+  const busy = !!state.backupExporting;
+  const items = [
+    {key:'exportPatients', label:'Patients', icon:'📋', title:'Patients (OPD Register)', desc:'OPD number, name, address, phone, gender, age and registration date for every registered patient.'},
+    {key:'exportVisits', label:'Patient visits', icon:'🩺', title:'Patient Visits', desc:'Every visit: date, patient, doctor, reason, prescribed medicines and dosage, and whether it was billed.'},
+    {key:'exportBills', label:'Bills', icon:'🧾', title:'Billing', desc:'Every bill: bill number, patient, medicine/service/consultation totals, grand total and payment method.'},
+    {key:'exportMedicines', label:'Medicine inventory', icon:'💊', title:'Medicine Inventory', desc:'Current stock list: name, batch, expiry, quantity, unit, reorder level and price.'},
+    {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'}
+  ];
+  const cards = items.map(it=>{
+    const isThis = busy && state.backupExporting.startsWith(it.label);
+    return `<div class="card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="font-size:26px;">${it.icon}</div>
+        <div>
+          <h3 style="margin:0 0 4px;font-size:16px;">${it.title}</h3>
+          <p style="margin:0;font-size:13px;color:var(--text-muted);max-width:460px;">${it.desc}</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" ${busy?'disabled':''} onclick="${it.key}()">${isThis?state.backupExporting:'Download CSV'}</button>
+    </div>`;
+  }).join('');
+  return adminShell(`
+    <h2 class="display">Backup / Export</h2>
+    <p style="color:var(--text-muted);font-size:14px;max-width:600px;margin-top:-8px;">Download a full copy of any list below as a CSV file — it opens directly in Excel, Google Sheets or Numbers. Keep periodic backups somewhere safe (a laptop, Google Drive, etc).</p>
+    ${cards}
+  `);
+}
 function viewAdminInfo(){
   const i=state.data.info;
   return adminShell(`<h2 class="display">Clinic Info</h2>
@@ -1508,6 +1628,7 @@ function render(){
       case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
+      case 'admin-backup': html=viewAdminBackup(); break;
       case 'admin-info': html=viewAdminInfo(); break;
       case 'admin-blog': html=viewAdminBlog(); break;
       default: html=viewHome();
