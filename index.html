@@ -149,6 +149,7 @@ const auth = getAuth(fbApp);
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function monthStartISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr+'T00:00:00');
@@ -201,6 +202,7 @@ let state = {
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
+  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
@@ -738,6 +740,56 @@ function printBill(b){
   setTimeout(()=>w.print(), 300);
 }
 
+/* ---------- collections report ---------- */
+async function loadCollectionsReport(){
+  state.reportLoading = true; render();
+  try{
+    const q = query(collection(db,'bills'), where('date','>=',state.reportFrom), where('date','<=',state.reportTo), orderBy('date'));
+    const snap = await getDocs(q);
+    state.reportBills = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    console.error('Failed to load collections report', e);
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    state.reportBills = [];
+  }
+  state.reportLoading = false; render();
+}
+window.setReportFrom = function(v){ state.reportFrom=v; loadCollectionsReport(); };
+window.setReportTo = function(v){ state.reportTo=v; loadCollectionsReport(); };
+window.applyReportPreset = function(preset){
+  const today = todayISO();
+  if(preset==='today'){ state.reportFrom=today; state.reportTo=today; }
+  else if(preset==='week'){
+    const d = new Date(); const day = d.getDay(); const diff = (day===0?6:day-1);
+    const start = new Date(d); start.setDate(d.getDate()-diff);
+    state.reportFrom = start.toISOString().slice(0,10); state.reportTo = today;
+  }else if(preset==='month'){ state.reportFrom = monthStartISO(); state.reportTo = today; }
+  loadCollectionsReport();
+};
+function reportTotals(bills){
+  let cash=0, upi=0, medTotal=0, extraTotal=0, consultationTotal=0;
+  bills.forEach(b=>{
+    const amt = Number(b.grandTotal)||0;
+    if(b.paymentMethod==='upi') upi+=amt; else cash+=amt;
+    medTotal += Number(b.medTotal)||0;
+    extraTotal += Number(b.extraTotal)||0;
+    consultationTotal += Number(b.consultationFee)||0;
+  });
+  return { total:cash+upi, cash, upi, count:bills.length, medTotal, extraTotal, consultationTotal };
+}
+function reportByDay(bills){
+  const map = {};
+  bills.forEach(b=>{
+    const d = b.date||'—';
+    if(!map[d]) map[d] = {date:d, count:0, total:0, cash:0, upi:0};
+    map[d].count++;
+    const amt = Number(b.grandTotal)||0;
+    map[d].total += amt;
+    if(b.paymentMethod==='upi') map[d].upi += amt; else map[d].cash += amt;
+  });
+  return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
   const username=document.getElementById('admin-email').value.trim().toLowerCase();
@@ -830,6 +882,7 @@ window.setView = async function(v){
     await Promise.all([loadBillsPage(true), loadMedicines()]);
     if(state.billingPrefillVisit){ selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
   }
+  if(v==='admin-reports') await loadCollectionsReport();
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
   render();
@@ -1006,7 +1059,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
     ['admin-appointments','Appointment Requests'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -1229,6 +1282,43 @@ function viewAdminBilling(){
     ${(!state.billsLoading && state.hasMoreBills) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreBills()">Load 50 more</button></div>` : ''}
   `);
 }
+function viewAdminReports(){
+  const totals = reportTotals(state.reportBills);
+  const byDay = reportByDay(state.reportBills);
+  const dayRows = byDay.map(d=>`<tr>
+    <td class="mono">${escapeHtml(d.date)}</td>
+    <td class="mono">${d.count}</td>
+    <td class="mono">₹${d.cash.toFixed(2)}</td>
+    <td class="mono">₹${d.upi.toFixed(2)}</td>
+    <td class="mono">₹${d.total.toFixed(2)}</td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Collections</h2>
+    <div class="toolbar">
+      <div class="row-actions">
+        <button class="btn btn-outline btn-small" onclick="applyReportPreset('today')">Today</button>
+        <button class="btn btn-outline btn-small" onclick="applyReportPreset('week')">This week</button>
+        <button class="btn btn-outline btn-small" onclick="applyReportPreset('month')">This month</button>
+      </div>
+      <div class="search-row">
+        <input type="date" value="${escapeHtml(state.reportFrom)}" onchange="setReportFrom(this.value)">
+        <span style="align-self:center;color:var(--text-muted);font-size:13px;">to</span>
+        <input type="date" value="${escapeHtml(state.reportTo)}" onchange="setReportTo(this.value)">
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="num">₹${totals.total.toFixed(2)}</div><div class="label">Total collected</div></div>
+      <div class="stat-card"><div class="num">₹${totals.cash.toFixed(2)}</div><div class="label">Cash</div></div>
+      <div class="stat-card"><div class="num">₹${totals.upi.toFixed(2)}</div><div class="label">UPI</div></div>
+      <div class="stat-card"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.reportLoading? `<div class="empty-state">Loading…</div>` :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
+    </div>
+  `);
+}
 function viewAdminInventory(){
   const m=state.editingMed;
   const search=state.medSearch.toLowerCase();
@@ -1320,6 +1410,7 @@ function render(){
       case 'admin-patients': html=viewAdminPatients(); break;
       case 'admin-visits': html=viewAdminVisits(); break;
       case 'admin-billing': html=viewAdminBilling(); break;
+      case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
       case 'admin-info': html=viewAdminInfo(); break;
