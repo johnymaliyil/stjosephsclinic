@@ -96,6 +96,8 @@
   .founder-card{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding-top:8px;}
   .founder-photo{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid var(--accent-soft);}
   .founder-placeholder{width:120px;height:120px;border-radius:50%;background:var(--surface-soft);border:3px solid var(--accent-soft);display:flex;align-items:center;justify-content:center;}
+  .wa-float{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:60;text-decoration:none;}
+  .wa-float svg{width:28px;height:28px;}
   .app-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);}
   .app-loading-mark{animation:appLoadingPulse 1.7s ease-in-out infinite;}
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
@@ -157,6 +159,16 @@ function daysUntil(dateStr){
 }
 function escapeHtml(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function waLink(phone){ return 'https://wa.me/'+String(phone||'').replace(/[^0-9]/g,''); }
+function whatsappFloatButton(){
+  const i = state.data.info;
+  if(!i.whatsapp) return '';
+  return `<a class="wa-float" href="${waLink(i.whatsapp)}" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.4 19.1c-.3-.2-1.9-1-2.2-1.1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.7-1-2.3-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3 4.8 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.5-.1 1.7-.7 2-1.4.2-.7.2-1.2.1-1.4z" fill="#fff"/>
+      <path d="M16 5.5c-5.8 0-10.5 4.7-10.5 10.5 0 1.9.5 3.6 1.4 5.2L5.5 26l4.9-1.3c1.5.8 3.2 1.3 5.1 1.3 5.8 0 10.5-4.7 10.5-10.5S21.8 5.5 16 5.5z" stroke="#fff" stroke-width="1.4" fill="none"/>
+    </svg>
+  </a>`;
+}
 
 const DEFAULT_INFO = {
   clinicName: "St Joseph's Children's & Diabetic Clinic",
@@ -169,6 +181,7 @@ const DEFAULT_INFO = {
   founderName: "Founder Dr M M Varkey",
   founderPhotoUrl: "",
   upiId: "",
+  whatsapp: "9048869262",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
@@ -228,6 +241,7 @@ window.saveClinicInfo = async function(){
   i.founderName = document.getElementById('if-founder-name').value.trim();
   i.founderPhotoUrl = document.getElementById('if-founder-photo').value.trim();
   i.upiId = document.getElementById('if-upi').value.trim();
+  i.whatsapp = document.getElementById('if-whatsapp').value.trim();
   await setDoc(infoRef, i);
   showToast('Clinic info saved.');
 };
@@ -326,6 +340,14 @@ window.updateAppointmentStatus = async function(id,status){
   showToast('Status updated.');
 };
 window.deleteAppointment = async function(id){ await deleteDoc(doc(db,'appointments',id)); await loadAppointments(); render(); };
+window.sendAppointmentWhatsApp = function(id){
+  const a = state.data.appointments.find(x=>x.id===id);
+  if(!a) return;
+  if(!a.phone){ showToast('No phone number on file for this request.'); return; }
+  const i = state.data.info;
+  const msg = `Hi ${a.name}, this is ${i.clinicName} regarding your appointment request${a.date?` for ${a.date}`:''}.`;
+  window.open(waLinkWithText(a.phone, msg), '_blank');
+};
 
 /* ---------- patients (paginated + indexed search) ---------- */
 async function computeNextOpdNo(){
@@ -519,6 +541,15 @@ window.saveVisitForm = async function(){
   resetVisitForm();
   lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
   showToast('Visit saved.'); render();
+};
+window.sendPrescriptionWhatsApp = function(visitId){
+  const v = state.data.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  const i = state.data.info;
+  const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}`).join('\n');
+  const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
+  window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
 window.printPrescription = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
@@ -718,6 +749,21 @@ window.printBillById = async function(id){
     }catch(e){ console.error(e); }
   }
   if(b) printBill(b); else showToast('Could not find that bill.');
+};
+function waLinkWithText(phone, text){ return waLink(phone) + (text ? ('?text='+encodeURIComponent(text)) : ''); }
+window.sendBillWhatsApp = async function(id){
+  let b = state.data.bills.find(x=>x.id===id);
+  if(!b){
+    try{
+      const snap = await getDoc(doc(db,'bills',id));
+      if(snap.exists()) b = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!b){ showToast('Could not find that bill.'); return; }
+  if(!b.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  const i = state.data.info;
+  const msg = `Hi ${b.patientName}, here is your bill from ${i.clinicName}.\nBill No: ${b.billNumber}\nDate: ${b.date}\nTotal: ${money(b.grandTotal)}\nPayment: ${b.paymentMethod==='upi'?'UPI':'Cash'}\nThank you for visiting us.`;
+  window.open(waLinkWithText(b.patientPhone, msg), '_blank');
 };
 window.billVisit = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
@@ -989,7 +1035,7 @@ function publicHeader(){
   </div>${state.showIosInstallHint?`<div class="container"><div class="top-alert" style="margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
     <span>Install this app: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</span>
     <button class="btn btn-outline btn-small" onclick="dismissIosInstallHint()">Dismiss</button>
-  </div></div>`:''}</header>`;
+  </div></div>`:''}</header>${whatsappFloatButton()}`;
 }
 function publicFooter(){
   const i=state.data.info;
@@ -1226,7 +1272,7 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
     <td class="row-actions">
-      ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button>`:''}
+      ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
       <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
     </td>
@@ -1314,7 +1360,7 @@ function viewAdminBilling(){
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
@@ -1404,7 +1450,7 @@ function viewAdminAppointments(){
   const rows=state.data.appointments.map(a=>`<tr>
     <td>${escapeHtml(a.name)}</td><td class="mono">${escapeHtml(a.phone)}</td><td class="mono">${escapeHtml(a.date)}</td><td>${escapeHtml(a.reason)}</td>
     <td><select onchange="updateAppointmentStatus('${a.id}',this.value)">${['pending','confirmed','done','cancelled'].map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-    <td><button class="btn btn-danger btn-small" onclick="deleteAppointment('${a.id}')">Delete</button></td></tr>`).join('');
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="sendAppointmentWhatsApp('${a.id}')">WhatsApp</button><button class="btn btn-danger btn-small" onclick="deleteAppointment('${a.id}')">Delete</button></td></tr>`).join('');
   return adminShell(`<h2 class="display">Appointment Requests</h2>
     <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
 }
@@ -1423,6 +1469,7 @@ function viewAdminInfo(){
         <div class="field"><label>Founder name</label><input id="if-founder-name" type="text" value="${escapeHtml(i.founderName||'')}"></div>
         <div class="field"><label>Founder photo URL (optional)</label><input id="if-founder-photo" type="text" placeholder="https://…" value="${escapeHtml(i.founderPhotoUrl||'')}"></div>
         <div class="field"><label>UPI ID (for bill payments)</label><input id="if-upi" type="text" placeholder="yourname@bank" value="${escapeHtml(i.upiId||'')}"></div>
+        <div class="field"><label>WhatsApp number (with country code)</label><input id="if-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.whatsapp||'')}"></div>
       </div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
