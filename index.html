@@ -197,7 +197,7 @@ let state = {
   patientCount:null, visitCount:null,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}] },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -423,7 +423,7 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}] };
 }
 window.setVisitPatientSearchField = function(field){
   state.visitForm.patientSearchField = field;
@@ -450,8 +450,8 @@ window.selectVisitPatient = function(id){
   render();
 };
 window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
-window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:''}); render(); };
-window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({medicineId:'',quantity:''}); render(); };
+window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
+window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
 window.updateVisitMedRow = function(idx,key,val){ state.visitForm.meds[idx][key]=val; };
 window.editVisit = function(id){
   const v = state.data.visits.find(x=>x.id===id);
@@ -460,8 +460,8 @@ window.editVisit = function(id){
   state.visitForm = {
     patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
-    date:v.date||todayISO(), reason:v.reason||'',
-    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity})) : [{medicineId:'',quantity:''}]
+    date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
+    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity,dosage:m.dosage||''})) : [{medicineId:'',quantity:'',dosage:''}]
   };
   render(); window.scrollTo(0,0);
 };
@@ -480,16 +480,17 @@ window.saveVisitForm = async function(){
   if(!f.selectedPatient){ showToast('Please select a patient for this visit.'); return; }
   const date = document.getElementById('vf-date').value;
   const reason = document.getElementById('vf-reason').value.trim();
+  const doctorName = document.getElementById('vf-doctor').value;
   if(!date){ showToast('Please choose a visit date.'); return; }
   const medRows = f.meds.filter(m=>m.medicineId && Number(m.quantity)>0);
   const medicines = medRows.map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
-    return { medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity) };
+    return { medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity), dosage:(m.dosage||'').trim() };
   });
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
-    date, reason, medicines
+    date, reason, doctorName, medicines
   };
   const batch = writeBatch(db);
   if(state.editingVisit){
@@ -518,6 +519,49 @@ window.saveVisitForm = async function(){
   resetVisitForm();
   lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
   showToast('Visit saved.'); render();
+};
+window.printPrescription = function(visitId){
+  const v = state.data.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  const i = state.data.info;
+  const rxRows = (v.medicines||[]).map((m,idx)=>`
+    <div style="margin-bottom:14px;">
+      <div><strong>${idx+1}. ${escapeHtml(m.name)}</strong> <span style="color:#736F64;">— Qty ${escapeHtml(String(m.quantity))}</span></div>
+      ${m.dosage?`<div style="color:#262420;margin-left:16px;">${escapeHtml(m.dosage)}</div>`:''}
+    </div>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription — ${escapeHtml(v.patientName)}</title>
+  <style>
+    body{font-family:Georgia,'Times New Roman',serif;color:#262420;max-width:640px;margin:32px auto;padding:0 20px;}
+    h1{font-size:20px;margin:0 0 2px;}
+    .muted{color:#736F64;font-size:13px;}
+    .row{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1F4A42;padding-bottom:14px;margin-bottom:14px;}
+    .rx-mark{font-family:Georgia,serif;font-size:22px;font-weight:bold;color:#1F4A42;margin:20px 0 14px;}
+    .sig{margin-top:60px;text-align:right;}
+    .sig-line{display:inline-block;border-top:1px solid #262420;padding-top:4px;min-width:200px;text-align:center;}
+    @media print{ body{margin:0;} }
+  </style></head><body>
+  <div class="row">
+    <div><h1>${escapeHtml(i.clinicName)}</h1><div class="muted">${escapeHtml(i.address)}<br>${escapeHtml(i.phone)}</div></div>
+    <div style="text-align:right;"><div class="muted">DATE</div><strong>${escapeHtml(v.date||'')}</strong></div>
+  </div>
+  <div style="margin-bottom:14px;">
+    <div class="muted">PATIENT</div>
+    <strong>${escapeHtml(v.patientName)}</strong> &middot; OPD ${escapeHtml(v.patientOpdNo||'')}<br>
+    ${escapeHtml(v.patientPhone||'')}
+    ${v.reason?`<div style="margin-top:6px;"><span class="muted">REASON</span> ${escapeHtml(v.reason)}</div>`:''}
+  </div>
+  <div class="rx-mark">℞</div>
+  ${rxRows || '<p class="muted">No medicines prescribed on this visit.</p>'}
+  <div class="sig">
+    <div class="sig-line">${v.doctorName?escapeHtml(v.doctorName):"Doctor's signature"}</div>
+  </div>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to print the prescription.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 300);
 };
 
 /* ---------- billing ---------- */
@@ -1146,7 +1190,7 @@ function viewAdminVisits(){
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
   const medRows = f.meds.map((m,idx)=>`
-    <div class="form-grid" style="grid-template-columns:2fr 1fr auto;align-items:end;margin-bottom:8px;">
+    <div class="form-grid" style="grid-template-columns:1.6fr .7fr 1.4fr auto;align-items:end;margin-bottom:8px;">
       <div class="field" style="margin-bottom:0;"><label>Medicine</label>
         <select onchange="updateVisitMedRow(${idx},'medicineId',this.value)">
           <option value="">— Select —</option>
@@ -1154,14 +1198,17 @@ function viewAdminVisits(){
         </select>
       </div>
       <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateVisitMedRow(${idx},'quantity',this.value)"></div>
+      <div class="field" style="margin-bottom:0;"><label>Dosage / instructions</label><input type="text" placeholder="e.g. 1 tab twice daily × 5 days" value="${escapeHtml(m.dosage||'')}" onchange="updateVisitMedRow(${idx},'dosage',this.value)"></div>
       <button class="btn btn-outline btn-small" onclick="removeVisitMedRow(${idx})">Remove</button>
     </div>`).join('');
+  const doctorOptions = (state.data.info.doctors||[]).map(d=>`<option value="${escapeHtml(d.name)}" ${f.doctorName===d.name?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
   const showForm = state.editingVisit || state.showVisitForm;
   const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
     <div class="form-grid">
       <div class="field"><label>Visit date</label><input id="vf-date" type="date" value="${escapeHtml(f.date)}"></div>
+      <div class="field"><label>Doctor</label><select id="vf-doctor"><option value="">— Not specified —</option>${doctorOptions}</select></div>
     </div>
     <div class="field"><label>Reason for visit</label><textarea id="vf-reason" rows="2">${escapeHtml(f.reason)}</textarea></div>
     <label>Prescribed medicines</label>
@@ -1179,6 +1226,7 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
     <td class="row-actions">
+      ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
       <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
     </td>
