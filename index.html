@@ -197,10 +197,14 @@ let state = {
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', meds:[{medicineId:'',quantity:''}] },
   editingVisit:null,
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], info:DEFAULT_INFO }
+  billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
+  billForm:{ visitQuery:'', visitResults:[], selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] },
+  billingPrefillVisit:null,
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
+let lastVisibleBillDoc = null;
 
 /* ---------- clinic info ---------- */
 const infoRef = doc(db,'clinicInfo','main');
@@ -289,8 +293,9 @@ window.saveMedForm = async function(){
   const quantity=document.getElementById('mf-qty').value;
   const unit=document.getElementById('mf-unit').value.trim();
   const reorderLevel=document.getElementById('mf-reorder').value;
+  const price=document.getElementById('mf-price').value;
   if(!name){ showToast('Medicine name is required.'); return; }
-  const data={name,batch,expiry,quantity,unit,reorderLevel,updatedAt:new Date().toISOString()};
+  const data={name,batch,expiry,quantity,unit,reorderLevel,price,updatedAt:new Date().toISOString()};
   if(state.editingMed){ await updateDoc(doc(db,'medicines',state.editingMed.id), data); state.editingMed=null; }
   else{ await addDoc(collection(db,'medicines'), data); }
   state.showMedForm=false;
@@ -511,6 +516,205 @@ window.saveVisitForm = async function(){
   showToast('Visit saved.'); render();
 };
 
+/* ---------- billing ---------- */
+async function loadBillsPage(reset){
+  state.billsLoading = true; render();
+  const term = state.billsSearchTerm.trim().toLowerCase();
+  try{
+    let q;
+    if(!term){
+      q = reset || !lastVisibleBillDoc
+        ? query(collection(db,'bills'), orderBy('createdAtMillis','desc'), limit(50))
+        : query(collection(db,'bills'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleBillDoc), limit(50));
+    }else{
+      q = reset || !lastVisibleBillDoc
+        ? query(collection(db,'bills'), orderBy('patientNameLower'), startAt(term), endAt(term+''), limit(50))
+        : query(collection(db,'bills'), orderBy('patientNameLower'), startAfter(lastVisibleBillDoc), endAt(term+''), limit(50));
+    }
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.bills = reset ? docs : state.data.bills.concat(docs);
+    lastVisibleBillDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleBillDoc;
+    state.hasMoreBills = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load bills — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.billsLoading = false; render();
+}
+window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); };
+window.loadMoreBills = function(){ loadBillsPage(false); };
+
+function resetBillForm(){
+  state.showBillForm = false;
+  state.billForm = { visitQuery:'', visitResults:[], selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}] };
+}
+function medItemsFromVisit(visit){
+  return (visit.medicines||[]).map(m=>{
+    const med = state.data.medicines.find(x=>x.id===m.medicineId);
+    return { medicineId:m.medicineId, name:m.name||(med?med.name:''), quantity:m.quantity, unitPrice: med?(med.price||0):0 };
+  });
+}
+window.searchBillVisit = async function(term){
+  state.billForm.visitQuery = term;
+  const t = term.trim().toLowerCase();
+  if(!t){ state.billForm.visitResults = []; render(); return; }
+  try{
+    const q = query(collection(db,'visits'), orderBy('patientNameLower'), startAt(t), endAt(t+''), limit(8));
+    const snap = await getDocs(q);
+    state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); }
+  render();
+};
+window.selectBillVisit = function(visitId){
+  const v = state.billForm.visitResults.find(x=>x.id===visitId);
+  if(v) selectBillVisitObject(v);
+  render();
+};
+function selectBillVisitObject(v){
+  state.billForm.selectedVisit = v;
+  state.billForm.visitQuery = '';
+  state.billForm.visitResults = [];
+  state.billForm.medItems = medItemsFromVisit(v);
+}
+window.clearBillVisit = function(){ state.billForm.selectedVisit = null; state.billForm.medItems = []; render(); };
+window.addBillMedItem = function(){ state.billForm.medItems.push({medicineId:'',name:'',quantity:1,unitPrice:0}); render(); };
+window.removeBillMedItem = function(idx){ state.billForm.medItems.splice(idx,1); render(); };
+window.updateBillMedItem = function(idx,key,val){
+  const item = state.billForm.medItems[idx];
+  if(key==='medicineId'){
+    const med = state.data.medicines.find(x=>x.id===val);
+    item.medicineId = val; item.name = med?med.name:''; item.unitPrice = med?(med.price||0):0;
+  }else{
+    item[key] = val;
+  }
+  render();
+};
+window.addBillExtraItem = function(){ state.billForm.extraItems.push({description:'',amount:''}); render(); };
+window.removeBillExtraItem = function(idx){ state.billForm.extraItems.splice(idx,1); if(!state.billForm.extraItems.length) state.billForm.extraItems.push({description:'',amount:''}); render(); };
+window.updateBillExtraItem = function(idx,key,val){ state.billForm.extraItems[idx][key]=val; };
+function billTotals(f){
+  const medTotal = f.medItems.reduce((s,m)=>s+(Number(m.quantity)||0)*(Number(m.unitPrice)||0), 0);
+  const extraTotal = f.extraItems.reduce((s,x)=>s+(Number(x.amount)||0), 0);
+  const consultationFee = Number(f.consultationFee)||0;
+  return { medTotal, extraTotal, consultationFee, grandTotal: medTotal+extraTotal+consultationFee };
+}
+async function computeNextBillNumber(){
+  try{
+    const q = query(collection(db,'bills'), orderBy('billNumber','desc'), limit(1));
+    const snap = await getDocs(q);
+    return snap.empty ? 1 : (Number(snap.docs[0].data().billNumber)||0)+1;
+  }catch(e){ return Date.now(); }
+}
+window.saveBillForm = async function(){
+  const f = state.billForm;
+  if(!f.selectedVisit){ showToast('Please select a patient visit to bill.'); return; }
+  const consultationFee = document.getElementById('bf-consultation').value;
+  f.consultationFee = consultationFee;
+  const medItems = f.medItems.filter(m=>m.name && Number(m.quantity)>0).map(m=>({
+    medicineId:m.medicineId||'', name:m.name, quantity:Number(m.quantity), unitPrice:Number(m.unitPrice)||0
+  }));
+  const extraItems = f.extraItems.filter(x=>x.description && Number(x.amount)>0).map(x=>({
+    description:x.description, amount:Number(x.amount)
+  }));
+  const totals = billTotals({...f, medItems, extraItems});
+  const v = f.selectedVisit;
+  const billNumber = await computeNextBillNumber();
+  const data = {
+    billNumber,
+    visitId:v.id, patientId:v.patientId, patientName:v.patientName, patientNameLower:(v.patientName||'').toLowerCase(),
+    patientOpdNo:v.patientOpdNo||'', patientPhone:v.patientPhone||'', visitDate:v.date||'',
+    medItems, extraItems, consultationFee:totals.consultationFee,
+    medTotal:totals.medTotal, extraTotal:totals.extraTotal, grandTotal:totals.grandTotal,
+    date:todayISO(), createdAtMillis:Date.now(), createdAt:new Date().toISOString()
+  };
+  let ref;
+  try{
+    ref = await addDoc(collection(db,'bills'), data);
+    await updateDoc(doc(db,'visits',v.id), {billId:ref.id, billNumber});
+  }catch(e){
+    console.error(e);
+    showToast('Could not save bill — check the browser console for details.');
+    return;
+  }
+  resetBillForm();
+  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true)]);
+  showToast('Bill saved.'); render();
+  printBill({id:ref.id, ...data});
+};
+window.deleteBill = async function(id){
+  const b = state.data.bills.find(x=>x.id===id);
+  if(!b) return;
+  if(!confirm('Delete this bill? This cannot be undone.')) return;
+  try{
+    await deleteDoc(doc(db,'bills',id));
+    if(b.visitId) await updateDoc(doc(db,'visits',b.visitId), {billId:null, billNumber:null});
+  }catch(e){ console.error(e); showToast('Could not delete bill.'); return; }
+  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true)]);
+};
+window.printBillById = async function(id){
+  let b = state.data.bills.find(x=>x.id===id);
+  if(!b){
+    try{
+      const snap = await getDoc(doc(db,'bills',id));
+      if(snap.exists()) b = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(b) printBill(b); else showToast('Could not find that bill.');
+};
+window.billVisit = function(visitId){
+  const v = state.data.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  state.billingPrefillVisit = v;
+  setView('admin-billing');
+};
+function money(n){ return '₹'+(Number(n)||0).toFixed(2); }
+function printBill(b){
+  const i = state.data.info;
+  const rows = [
+    ...b.medItems.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="r">${escapeHtml(String(m.quantity))}</td><td class="r">${money(m.unitPrice)}</td><td class="r">${money(m.quantity*m.unitPrice)}</td></tr>`),
+    ...b.extraItems.map(x=>`<tr><td>${escapeHtml(x.description)}</td><td class="r">1</td><td class="r">${money(x.amount)}</td><td class="r">${money(x.amount)}</td></tr>`),
+    b.consultationFee?`<tr><td>Consultation fee</td><td class="r">1</td><td class="r">${money(b.consultationFee)}</td><td class="r">${money(b.consultationFee)}</td></tr>`:''
+  ].join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill ${b.billNumber}</title>
+  <style>
+    body{font-family:Georgia,'Times New Roman',serif;color:#262420;max-width:640px;margin:32px auto;padding:0 20px;}
+    h1{font-size:20px;margin:0 0 2px;}
+    .muted{color:#736F64;font-size:13px;}
+    .row{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1F4A42;padding-bottom:14px;margin-bottom:14px;}
+    table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;}
+    th{text-align:left;font-size:11px;text-transform:uppercase;color:#736F64;border-bottom:1px solid #E1D9C5;padding:6px 4px;}
+    td{padding:8px 4px;border-bottom:1px solid #F1ECDF;}
+    .r{text-align:right;}
+    .totals{margin-top:10px;width:100%;}
+    .totals td{border:none;padding:4px;}
+    .grand{font-weight:bold;font-size:16px;border-top:2px solid #1F4A42;}
+    @media print{ body{margin:0;} }
+  </style></head><body>
+  <div class="row">
+    <div><h1>${escapeHtml(i.clinicName)}</h1><div class="muted">${escapeHtml(i.address)}<br>${escapeHtml(i.phone)}</div></div>
+    <div style="text-align:right;"><div class="muted">BILL NO.</div><strong>${escapeHtml(String(b.billNumber))}</strong><div class="muted" style="margin-top:6px;">DATE</div>${escapeHtml(b.date)}</div>
+  </div>
+  <div style="margin-bottom:14px;">
+    <div class="muted">PATIENT</div>
+    <strong>${escapeHtml(b.patientName)}</strong> &middot; OPD ${escapeHtml(b.patientOpdNo||'')}<br>
+    ${escapeHtml(b.patientPhone||'')}${b.visitDate?` &middot; Visit date: ${escapeHtml(b.visitDate)}`:''}
+  </div>
+  <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="r">${money(b.medTotal+b.extraTotal+b.consultationFee)}</td></tr>
+    <tr class="grand"><td>Total</td><td class="r">${money(b.grandTotal)}</td></tr>
+  </table>
+  <p class="muted" style="margin-top:30px;">Thank you.</p>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to print the bill.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 300);
+}
+
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
   const username=document.getElementById('admin-email').value.trim().toLowerCase();
@@ -591,12 +795,18 @@ function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast
 window.setView = async function(v){
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  resetBillForm();
   if(v.startsWith('admin-') && v!=='admin-login'){ try{ localStorage.setItem('lastAdminView', v); }catch(e){} }
   render(); window.scrollTo(0,0);
   if(v==='home'||v==='blog') await loadBlogPosts();
   if(v==='admin-dashboard') await loadDashboardStats();
   if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
   if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
+  if(v==='admin-billing'){
+    state.billsSearchTerm=''; lastVisibleBillDoc=null;
+    await Promise.all([loadBillsPage(true), loadMedicines()]);
+    if(state.billingPrefillVisit){ selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
+  }
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
   render();
@@ -773,7 +983,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-inventory','Medicine Inventory'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],
     ['admin-appointments','Appointment Requests'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -892,7 +1102,10 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button></td>
+    <td class="row-actions">
+      ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
+      <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
+    </td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Patient Visits</h2>
@@ -906,6 +1119,77 @@ function viewAdminVisits(){
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
     ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
+  `);
+}
+function viewAdminBilling(){
+  const f = state.billForm;
+  const visitBlock = f.selectedVisit
+    ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><strong>${escapeHtml(f.selectedVisit.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedVisit.patientOpdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">Visit ${escapeHtml(f.selectedVisit.date||'')} — ${escapeHtml(f.selectedVisit.reason||'')}</span></div>
+        <button class="btn btn-outline btn-small" onclick="clearBillVisit()">Change</button>
+      </div>`
+    : `<div>
+        <input type="text" placeholder="Search patient by name to find their visit…" value="${escapeHtml(f.visitQuery)}" oninput="searchBillVisit(this.value)">
+        ${f.visitResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.visitResults.map(v=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectBillVisit('${v.id}')"><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.date||'')} ${v.billId?'<span class="badge badge-warn">Already billed</span>':''}</div>`).join('')}</div>` : ''}
+      </div>`;
+  const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const medRows = f.medItems.map((m,idx)=>`
+    <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Medicine</label>
+        <select onchange="updateBillMedItem(${idx},'medicineId',this.value)">
+          <option value="">— Select —</option>
+          ${medOptions.map(x=>`<option value="${x.id}" ${m.medicineId===x.id?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Qty</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateBillMedItem(${idx},'quantity',this.value)"></div>
+      <div class="field" style="margin-bottom:0;"><label>Unit price (₹)</label><input type="number" min="0" step="0.01" value="${escapeHtml(m.unitPrice)}" onchange="updateBillMedItem(${idx},'unitPrice',this.value)"></div>
+      <button class="btn btn-outline btn-small" onclick="removeBillMedItem(${idx})">Remove</button>
+    </div>`).join('');
+  const extraRows = f.extraItems.map((x,idx)=>`
+    <div class="form-grid" style="grid-template-columns:2fr 1fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Service / item</label><input type="text" placeholder="e.g. Lab test, dressing…" value="${escapeHtml(x.description)}" onchange="updateBillExtraItem(${idx},'description',this.value)"></div>
+      <div class="field" style="margin-bottom:0;"><label>Amount (₹)</label><input type="number" min="0" step="0.01" value="${escapeHtml(x.amount)}" onchange="updateBillExtraItem(${idx},'amount',this.value)"></div>
+      <button class="btn btn-outline btn-small" onclick="removeBillExtraItem(${idx})">Remove</button>
+    </div>`).join('');
+  const totals = billTotals(f);
+  const formCard = !state.showBillForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showBillForm=true; render();">+ New bill</button></div>` : `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">New bill</h3>
+    <div class="field"><label>Patient visit</label>${visitBlock}</div>
+    <label>Medicines</label>
+    ${medRows || `<p style="color:var(--text-muted);font-size:13px;">No medicines yet — select a visit above, or add one.</p>`}
+    <button class="btn btn-outline btn-small" onclick="addBillMedItem()">+ Add medicine</button>
+    <label style="margin-top:16px;display:block;">Services / other charges</label>
+    ${extraRows}
+    <button class="btn btn-outline btn-small" onclick="addBillExtraItem()">+ Add item</button>
+    <div class="field" style="max-width:220px;margin-top:16px;"><label>Consultation fee (₹)</label><input id="bf-consultation" type="number" min="0" step="0.01" value="${escapeHtml(f.consultationFee)}" onchange="state.billForm.consultationFee=this.value; render();"></div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:right;">
+      <div style="color:var(--text-muted);font-size:13px;">Medicines ₹${totals.medTotal.toFixed(2)} + Services ₹${totals.extraTotal.toFixed(2)} + Consultation ₹${totals.consultationFee.toFixed(2)}</div>
+      <div class="display" style="font-size:22px;color:var(--primary-dark);">Total: ₹${totals.grandTotal.toFixed(2)}</div>
+    </div>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveBillForm()">Save & Print</button>
+      <button class="btn btn-outline" onclick="resetBillForm(); render();">Cancel</button>
+    </div>
+  </div>`;
+  const rows = state.data.bills.map(b=>`<tr>
+    <td class="mono">${escapeHtml(b.date)}</td>
+    <td class="mono">${escapeHtml(String(b.billNumber))}</td>
+    <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
+    <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Billing</h2>
+    ${formCard}
+    <div class="search-row" style="margin-bottom:16px;">
+      <input type="text" placeholder="Search bills by patient name…" value="${escapeHtml(state.billsSearchTerm)}" oninput="setBillsSearchTerm(this.value)">
+    </div>
+    <div class="table-wrap">
+      ${state.billsLoading? `<div class="empty-state">Loading…</div>` :
+        rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">🧾</div>No bills yet.</div>`}
+    </div>
+    ${(!state.billsLoading && state.hasMoreBills) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreBills()">Load 50 more</button></div>` : ''}
   `);
 }
 function viewAdminInventory(){
@@ -922,6 +1206,7 @@ function viewAdminInventory(){
       <div class="field"><label>Quantity</label><input id="mf-qty" type="number" min="0" value="${m?m.quantity:''}"></div>
       <div class="field"><label>Unit</label><input id="mf-unit" type="text" value="${m?escapeHtml(m.unit):''}"></div>
       <div class="field"><label>Reorder level</label><input id="mf-reorder" type="number" min="0" value="${m?m.reorderLevel:''}"></div>
+      <div class="field"><label>Price per unit (₹)</label><input id="mf-price" type="number" min="0" step="0.01" value="${m?escapeHtml(m.price||''):''}"></div>
     </div>
     <div class="row-actions" style="margin-top:6px;">
       <button class="btn btn-primary" onclick="saveMedForm()">${m?'Save changes':'Add to inventory'}</button>
@@ -930,13 +1215,14 @@ function viewAdminInventory(){
   const rows=list.map(x=>{const s=medStatus(x); return `<tr>
     <td>${escapeHtml(x.name)}</td><td class="mono">${escapeHtml(x.batch)}</td><td class="mono">${escapeHtml(x.expiry)}</td>
     <td class="mono">${escapeHtml(x.quantity)} ${escapeHtml(x.unit)}</td><td class="mono">${escapeHtml(x.reorderLevel)}</td>
+    <td class="mono">${x.price?'₹'+escapeHtml(x.price):'—'}</td>
     <td><span class="badge ${s.cls}">${s.label}</span></td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editMed('${x.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteMed('${x.id}')">Delete</button></td>
   </tr>`;}).join('');
   return adminShell(`
     <h2 class="display">Medicine Inventory</h2>${formCard}
     <div class="toolbar"><input type="text" placeholder="Search by name or batch" value="${escapeHtml(state.medSearch)}" oninput="state.medSearch=this.value; render();"><span style="font-size:13px;color:var(--text-muted);">${list.length} item(s)</span></div>
-    <div class="table-wrap">${list.length?`<table><thead><tr><th>Name</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Reorder at</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💊</div>No medicines match your search yet.</div>`}</div>
+    <div class="table-wrap">${list.length?`<table><thead><tr><th>Name</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Reorder at</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💊</div>No medicines match your search yet.</div>`}</div>
   `);
 }
 function viewAdminAppointments(){
@@ -995,6 +1281,7 @@ function render(){
       case 'admin-dashboard': html=viewAdminDashboard(); break;
       case 'admin-patients': html=viewAdminPatients(); break;
       case 'admin-visits': html=viewAdminVisits(); break;
+      case 'admin-billing': html=viewAdminBilling(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
       case 'admin-info': html=viewAdminInfo(); break;
