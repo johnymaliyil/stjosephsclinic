@@ -29,14 +29,17 @@
   .mono{font-family:'IBM Plex Mono',monospace;}
   a{color:inherit;}
   button{font-family:inherit;cursor:pointer;}
-  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:6px;border:1px solid transparent;font-weight:600;font-size:14px;}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:6px;border:1px solid transparent;font-weight:600;font-size:14px;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .08s ease;}
   .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn:active:not(:disabled){transform:scale(.97);}
   .btn-primary{background:var(--primary);color:#fff;}
-  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-primary:hover{background:var(--primary-dark);box-shadow:0 3px 10px rgba(21,53,48,.25);}
   .btn-accent{background:var(--accent);color:#2A1D06;}
+  .btn-accent:hover{background:#A87830;box-shadow:0 3px 10px rgba(160,120,48,.3);}
   .btn-outline{background:transparent;border-color:var(--border);color:var(--text);}
-  .btn-outline:hover{border-color:var(--primary);}
+  .btn-outline:hover{border-color:var(--primary);background:var(--surface-soft);}
   .btn-danger{background:var(--danger-soft);color:var(--danger);}
+  .btn-danger:hover{background:var(--danger);color:#fff;}
   .btn-small{padding:6px 12px;font-size:13px;border-radius:5px;}
   input,select,textarea{font-family:inherit;font-size:14px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--text);width:100%;}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:1px;}
@@ -48,7 +51,8 @@
   .nav-row{display:flex;align-items:center;justify-content:space-between;padding-top:14px;padding-bottom:14px;gap:12px;flex-wrap:wrap;}
   .logo{display:flex;align-items:center;gap:10px;font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:var(--primary-dark);}
   nav.links{display:flex;gap:4px;flex-wrap:wrap;}
-  nav.links button{background:none;border:none;padding:8px 12px;border-radius:6px;font-size:14px;font-weight:500;color:var(--text-muted);}
+  nav.links button{background:none;border:none;padding:8px 12px;border-radius:6px;font-size:14px;font-weight:500;color:var(--text-muted);transition:background .15s ease,color .15s ease;}
+  nav.links button:hover{background:var(--surface-soft);color:var(--primary-dark);}
   nav.links button.active{color:var(--primary-dark);background:var(--surface-soft);font-weight:600;}
   .pulse-divider{width:100%;height:36px;display:block;}
   .hero{padding-top:64px;padding-bottom:40px;}
@@ -70,25 +74,32 @@
   table{width:100%;border-collapse:collapse;font-size:14px;}
   th{text-align:left;font-size:11px;text-transform:uppercase;color:var(--text-muted);padding:8px 10px;border-bottom:2px solid var(--border);}
   td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  td{transition:background .12s ease;}
   tr:hover td{background:var(--surface-soft);}
   .table-wrap{overflow-x:auto;}
   .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);}
   .empty-state .icon{font-size:28px;margin-bottom:8px;}
+  .skeleton-row{height:14px;border-radius:4px;margin-bottom:10px;background:linear-gradient(90deg,var(--surface-soft) 25%,#E8E1CC 37%,var(--surface-soft) 63%);background-size:400% 100%;animation:skeletonShimmer 1.4s ease infinite;}
+  @keyframes skeletonShimmer{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
   footer.site{border-top:1px solid var(--border);padding:30px 0;margin-top:50px;color:var(--text-muted);font-size:13px;}
   .admin-shell{display:flex;min-height:100vh;}
   .admin-side{width:220px;background:var(--primary-dark);color:#fff;padding:22px 14px;flex-shrink:0;}
   .admin-side h2{font-size:16px;margin:0 0 20px;color:#fff;font-family:'Fraunces',serif;}
-  .admin-side button{display:block;width:100%;text-align:left;background:none;border:none;color:#E9E4D6;padding:10px 12px;border-radius:6px;font-size:14px;margin-bottom:2px;}
+  .admin-side button{display:block;width:100%;text-align:left;background:none;border:none;color:#E9E4D6;padding:10px 12px;border-radius:6px;font-size:14px;margin-bottom:2px;transition:background .15s ease,color .15s ease;}
+  .admin-side button:hover{background:rgba(255,255,255,.08);color:#fff;}
   .admin-side button.active{background:rgba(255,255,255,.14);color:#fff;font-weight:600;}
   .admin-main{flex:1;padding:28px;max-width:960px;}
   .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
-  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;transition:box-shadow .15s ease,transform .1s ease,border-color .15s ease;}
+  .stat-card-link{cursor:pointer;}
+  .stat-card-link:hover{box-shadow:0 4px 14px rgba(31,74,66,.12);border-color:var(--primary);transform:translateY(-2px);}
   .stat-card .num{font-family:'Fraunces',serif;font-size:30px;color:var(--primary-dark);}
   .stat-card .label{font-size:12px;color:var(--text-muted);text-transform:uppercase;}
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;}
-  .top-alert{background:var(--accent-soft);color:#5A3D0E;border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;}
+  .top-alert{background:var(--accent-soft);color:#5A3D0E;border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;animation:toastIn .25s ease;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row select{max-width:150px;}
   .search-row input{max-width:260px;}
@@ -103,7 +114,7 @@
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
   .app-loading-text{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);}
   @keyframes appLoadingPulse{0%,100%{opacity:.5;transform:scale(.92);}50%{opacity:1;transform:scale(1);}}
-  @media (prefers-reduced-motion:reduce){.app-loading-mark{animation:none;}}
+  @media (prefers-reduced-motion:reduce){.app-loading-mark,.skeleton-row,.top-alert{animation:none;}.stat-card-link:hover{transform:none;}}
   @media (max-width:720px){
     .admin-shell{flex-direction:column;}
     .admin-side{width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;}
@@ -158,6 +169,10 @@ function daysUntil(dateStr){
   return Math.round((d - new Date(new Date().toDateString())) / 86400000);
 }
 function escapeHtml(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function loadingSkeleton(rows){
+  const widths=['92%','76%','85%','62%','90%','70%'];
+  return `<div style="padding:4px 0;">${Array.from({length:rows||5}).map((_,i)=>`<div class="skeleton-row" style="width:${widths[i%widths.length]};"></div>`).join('')}</div>`;
+}
 function waLink(phone){ return 'https://wa.me/'+String(phone||'').replace(/[^0-9]/g,''); }
 function whatsappFloatButton(){
   const i = state.data.info;
@@ -1260,9 +1275,9 @@ function viewAdminDashboard(){
   return adminShell(`
     <h2 class="display">Overview</h2>
     <div class="stat-row">
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
-      <div class="stat-card" style="cursor:pointer;" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
+      <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
+      <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
+      <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
     <p style="color:var(--text-muted);font-size:14px;">Data is stored in your clinic's own Firebase project, accessible from any device where staff log in. Not a HIPAA/DPDP-compliant medical records system — treat it as an internal working tool.</p>
   `);
@@ -1302,7 +1317,7 @@ function viewAdminPatients(){
     <h2 class="display">OPD Patient Registration</h2>
     ${formCard}${searchRow}
     <div class="table-wrap">
-      ${state.patientsLoading? `<div class="empty-state">Loading…</div>` :
+      ${state.patientsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Address</th><th>Phone</th><th>Gender</th><th>Age</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗂️</div>No patients match your search yet.</div>`}
     </div>
@@ -1376,7 +1391,7 @@ function viewAdminVisits(){
       <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)">
     </div>
     <div class="table-wrap">
-      ${state.visitsLoading? `<div class="empty-state">Loading…</div>` :
+      ${state.visitsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
@@ -1461,7 +1476,7 @@ function viewAdminBilling(){
       <input type="text" placeholder="Search bills by patient name…" value="${escapeHtml(state.billsSearchTerm)}" oninput="setBillsSearchTerm(this.value)">
     </div>
     <div class="table-wrap">
-      ${state.billsLoading? `<div class="empty-state">Loading…</div>` :
+      ${state.billsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🧾</div>No bills yet.</div>`}
     </div>
@@ -1499,7 +1514,7 @@ function viewAdminReports(){
       <div class="stat-card"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
     </div>
     <div class="table-wrap">
-      ${state.reportLoading? `<div class="empty-state">Loading…</div>` :
+      ${state.reportLoading? loadingSkeleton(5) :
         byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
     </div>
