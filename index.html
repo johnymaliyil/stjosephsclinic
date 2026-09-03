@@ -723,6 +723,20 @@ window.saveBillForm = async function(){
   const totals = billTotals({...f, medItems, extraItems});
   const v = f.selectedVisit;
   const billNumber = await computeNextBillNumber();
+
+  // Stock for medicines already prescribed on the visit was deducted when the visit was
+  // saved. Only the difference between the bill's final quantities and the visit's original
+  // quantities needs to be applied here (covers medicines added or increased at billing time).
+  const visitMedMap = {};
+  (v.medicines||[]).forEach(m=>{ if(m.medicineId) visitMedMap[m.medicineId] = (visitMedMap[m.medicineId]||0) + (Number(m.quantity)||0); });
+  const billMedMap = {};
+  medItems.forEach(m=>{ if(m.medicineId) billMedMap[m.medicineId] = (billMedMap[m.medicineId]||0) + (Number(m.quantity)||0); });
+  const inventoryDelta = {};
+  new Set([...Object.keys(visitMedMap), ...Object.keys(billMedMap)]).forEach(id=>{
+    const delta = (billMedMap[id]||0) - (visitMedMap[id]||0);
+    if(delta) inventoryDelta[id] = delta;
+  });
+
   const data = {
     billNumber,
     visitId:v.id, patientId:v.patientId, patientName:v.patientName, patientNameLower:(v.patientName||'').toLowerCase(),
@@ -730,19 +744,23 @@ window.saveBillForm = async function(){
     medItems, extraItems, consultationFee:totals.consultationFee,
     medTotal:totals.medTotal, extraTotal:totals.extraTotal, grandTotal:totals.grandTotal,
     paymentMethod: f.paymentMethod==='upi' ? 'upi' : 'cash',
+    inventoryDelta,
     date:todayISO(), createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
-  let ref;
+  const ref = doc(collection(db,'bills'));
+  const batch = writeBatch(db);
+  batch.set(ref, data);
+  batch.update(doc(db,'visits',v.id), {billId:ref.id, billNumber});
+  Object.entries(inventoryDelta).forEach(([medId,delta])=>{ batch.update(doc(db,'medicines',medId), {quantity:increment(-delta)}); });
   try{
-    ref = await addDoc(collection(db,'bills'), data);
-    await updateDoc(doc(db,'visits',v.id), {billId:ref.id, billNumber});
+    await batch.commit();
   }catch(e){
     console.error(e);
     showToast('Could not save bill — check the browser console for details.');
     return;
   }
   resetBillForm();
-  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true)]);
+  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
   showToast('Bill saved.'); render();
   printBill({id:ref.id, ...data});
 };
@@ -750,11 +768,14 @@ window.deleteBill = async function(id){
   const b = state.data.bills.find(x=>x.id===id);
   if(!b) return;
   if(!confirm('Delete this bill? This cannot be undone.')) return;
+  const batch = writeBatch(db);
+  batch.delete(doc(db,'bills',id));
+  if(b.visitId) batch.update(doc(db,'visits',b.visitId), {billId:null, billNumber:null});
+  Object.entries(b.inventoryDelta||{}).forEach(([medId,delta])=>{ batch.update(doc(db,'medicines',medId), {quantity:increment(delta)}); });
   try{
-    await deleteDoc(doc(db,'bills',id));
-    if(b.visitId) await updateDoc(doc(db,'visits',b.visitId), {billId:null, billNumber:null});
+    await batch.commit();
   }catch(e){ console.error(e); showToast('Could not delete bill.'); return; }
-  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true)]);
+  lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
 };
 window.printBillById = async function(id){
   let b = state.data.bills.find(x=>x.id===id);
@@ -1441,6 +1462,7 @@ function viewAdminBilling(){
     <label>Medicines</label>
     ${medRows || `<p style="color:var(--text-muted);font-size:13px;">No medicines yet — select a visit above, or add one.</p>`}
     <button class="btn btn-outline btn-small" onclick="addBillMedItem()">+ Add medicine</button>
+    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Quantities carried over from the visit are already deducted from stock. Adding a medicine here or increasing a quantity deducts the extra amount from Medicine Inventory when you save.</p>
     <label style="margin-top:16px;display:block;">Services / other charges</label>
     ${extraRows}
     <button class="btn btn-outline btn-small" onclick="addBillExtraItem()">+ Add item</button>
