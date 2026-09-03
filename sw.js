@@ -30,3 +30,26 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match(SHELL_URL)))
   );
 });
+
+// Hourly staff reminder notifications carry action buttons (shown via
+// registration.showNotification, not the plain Notification constructor, since
+// action buttons only work on service-worker-issued notifications). Route a
+// click to the right admin screen: focus an already-open tab and hand it the
+// action, or open a new tab with the action in the query string if none is open.
+self.addEventListener('notificationclick', (event) => {
+  const action = event.action || '';
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'staff-reminder-action', action });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(action ? `./?remind=${action}` : './');
+      }
+    })
+  );
+});

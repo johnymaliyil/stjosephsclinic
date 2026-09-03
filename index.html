@@ -14,6 +14,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js" defer></script>
 <style>
   :root{
     --bg:#FBF7EE; --surface:#FFFFFF; --surface-soft:#F1ECDF;
@@ -99,7 +100,9 @@
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;}
   .top-alert{background:var(--accent-soft);color:#5A3D0E;border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;animation:toastIn .25s ease;}
+  .top-alert-success{background:var(--success-soft);color:#1F4A32;border-color:var(--success);font-weight:600;animation:toastPop .4s ease;}
   @keyframes toastIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes toastPop{0%{opacity:0;transform:translateY(-6px) scale(.92);}60%{opacity:1;transform:translateY(0) scale(1.04);}100%{transform:scale(1);}}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row select{max-width:150px;}
   .search-row input{max-width:260px;}
@@ -114,7 +117,7 @@
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
   .app-loading-text{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);}
   @keyframes appLoadingPulse{0%,100%{opacity:.5;transform:scale(.92);}50%{opacity:1;transform:scale(1);}}
-  @media (prefers-reduced-motion:reduce){.app-loading-mark,.skeleton-row,.top-alert{animation:none;}.stat-card-link:hover{transform:none;}}
+  @media (prefers-reduced-motion:reduce){.app-loading-mark,.skeleton-row,.top-alert,.top-alert-success{animation:none;}.stat-card-link:hover{transform:none;}}
   @media (max-width:720px){
     .admin-shell{flex-direction:column;}
     .admin-side{width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;}
@@ -197,6 +200,10 @@ const DEFAULT_INFO = {
   founderPhotoUrl: "",
   upiId: "",
   whatsapp: "9048869262",
+  notifyEmail: "drjosephvarkey@gmail.com",
+  emailjsPublicKey: "",
+  emailjsServiceId: "",
+  emailjsTemplateId: "",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
@@ -244,6 +251,44 @@ async function loadClinicInfo(){
   const snap = await getDoc(infoRef);
   if(snap.exists()){ state.data.info = Object.assign({}, DEFAULT_INFO, snap.data()); }
   else{ state.data.info = DEFAULT_INFO; await setDoc(infoRef, DEFAULT_INFO); }
+  initEmailjs();
+}
+function initEmailjs(){
+  const i = state.data.info;
+  if(window.emailjs && i.emailjsPublicKey){
+    try{ window.emailjs.init({publicKey:i.emailjsPublicKey}); }catch(e){}
+  }
+}
+function sendClinicEmail(subject, message){
+  const i = state.data.info;
+  if(!(window.emailjs && i.emailjsServiceId && i.emailjsTemplateId && i.emailjsPublicKey && i.notifyEmail)) return;
+  window.emailjs.send(i.emailjsServiceId, i.emailjsTemplateId, { to_email:i.notifyEmail, subject, message })
+    .catch(e=>console.error('Email notification failed:', e));
+}
+function billEmailText(b){
+  const lines = [`Bill #${b.billNumber} — ${b.date}`, `Patient: ${b.patientName} (OPD ${b.patientOpdNo||'—'})`];
+  if(b.patientPhone) lines.push(`Phone: ${b.patientPhone}`);
+  lines.push('');
+  if(b.medItems && b.medItems.length){
+    lines.push('Medicines:');
+    b.medItems.forEach(m=>lines.push(`  - ${m.name} x${m.quantity} @ ₹${Number(m.unitPrice).toFixed(2)} = ₹${(m.quantity*m.unitPrice).toFixed(2)}`));
+  }
+  if(b.extraItems && b.extraItems.length){
+    lines.push('Services:');
+    b.extraItems.forEach(x=>lines.push(`  - ${x.description}: ₹${Number(x.amount).toFixed(2)}`));
+  }
+  lines.push('', `Consultation fee: ₹${Number(b.consultationFee||0).toFixed(2)}`, `Total: ₹${Number(b.grandTotal||0).toFixed(2)}`, `Payment method: ${b.paymentMethod==='upi'?'UPI':'Cash'}`);
+  return lines.join('\n');
+}
+function visitEmailText(v){
+  const lines = [`Patient visit — ${v.date}`, `Patient: ${v.patientName} (OPD ${v.patientOpdNo||'—'})`];
+  if(v.patientPhone) lines.push(`Phone: ${v.patientPhone}`);
+  lines.push(`Doctor: ${v.doctorName||'—'}`, `Reason: ${v.reason||'—'}`);
+  if(v.medicines && v.medicines.length){
+    lines.push('', 'Prescribed medicines:');
+    v.medicines.forEach(m=>lines.push(`  - ${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`));
+  }
+  return lines.join('\n');
 }
 window.saveClinicInfo = async function(){
   const i = state.data.info;
@@ -258,7 +303,12 @@ window.saveClinicInfo = async function(){
   i.founderPhotoUrl = document.getElementById('if-founder-photo').value.trim();
   i.upiId = document.getElementById('if-upi').value.trim();
   i.whatsapp = document.getElementById('if-whatsapp').value.trim();
+  i.notifyEmail = document.getElementById('if-notify-email').value.trim();
+  i.emailjsPublicKey = document.getElementById('if-emailjs-key').value.trim();
+  i.emailjsServiceId = document.getElementById('if-emailjs-service').value.trim();
+  i.emailjsTemplateId = document.getElementById('if-emailjs-template').value.trim();
   await setDoc(infoRef, i);
+  initEmailjs();
   showToast('Clinic info saved.');
 };
 window.doctorEditor = null; // placeholder, real fn below
@@ -422,11 +472,12 @@ window.savePatientForm = async function(){
   }
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
     phone, gender, age, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
+  const wasEditing = !!state.editingPatient;
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
   else{ await addDoc(collection(db,'patients'), data); }
   state.showPatientForm=false;
   lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
-  showToast('Patient saved.');
+  showToast(wasEditing ? 'Patient details updated.' : '👍 Patient registered!', wasEditing ? 'info' : 'success');
 };
 
 /* ---------- patient visits ---------- */
@@ -556,7 +607,8 @@ window.saveVisitForm = async function(){
   }
   resetVisitForm();
   lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
-  showToast('Visit saved.'); render();
+  showToast('👍 Visit saved!', 'success'); render();
+  sendClinicEmail(`New patient visit — ${data.patientName}`, visitEmailText(data));
 };
 window.sendPrescriptionWhatsApp = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
@@ -761,7 +813,8 @@ window.saveBillForm = async function(){
   }
   resetBillForm();
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
-  showToast('Bill saved.'); render();
+  showToast('👍 Bill saved!', 'success'); render();
+  sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
   printBill({id:ref.id, ...data});
 };
 window.deleteBill = async function(id){
@@ -1016,6 +1069,7 @@ window.tryAdminLogin = async function(){
   try{
     await signInWithEmailAndPassword(auth, email, pass);
     state.loginError='';
+    if('Notification' in window && Notification.permission==='default'){ Notification.requestPermission().catch(()=>{}); }
     setView('admin-dashboard');
   }catch(e){
     state.loginError = 'Login failed — check the username and password.';
@@ -1029,6 +1083,15 @@ window.adminLogout = async function(){
 };
 onAuthStateChanged(auth, (user)=>{
   state.isAdmin = !!user;
+  if(user){ startStaffReminders(); } else { stopStaffReminders(); }
+  if(user){
+    const remindAction = new URLSearchParams(location.search).get('remind');
+    if(remindAction){
+      history.replaceState(null,'',location.pathname);
+      handleReminderAction(remindAction);
+      return;
+    }
+  }
   if(user && state.view==='home'){
     let savedView = null;
     try{ savedView = localStorage.getItem('lastAdminView'); }catch(e){}
@@ -1036,6 +1099,42 @@ onAuthStateChanged(auth, (user)=>{
   }
   render();
 });
+
+/* ---------- staff reminders ---------- */
+let reminderTimer = null;
+const REMINDER_INTERVAL_MS = 60*60*1000;
+async function showStaffReminder(){
+  const body = 'Reminder: log any pending patient visits and billing.';
+  if('serviceWorker' in navigator && 'Notification' in window && Notification.permission==='granted'){
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("St Joseph's Clinic", {
+        body, icon:'icons/icon-192.png', badge:'icons/icon-192.png', image:'icons/reminder-banner.png',
+        tag:'stjosephs-staff-reminder', renotify:true, requireInteraction:true,
+        actions:[{action:'visits', title:'Log a visit'},{action:'billing', title:'New bill'}]
+      });
+      return;
+    }catch(e){}
+  }
+  showToast(body);
+}
+function startStaffReminders(){
+  if(reminderTimer) return;
+  reminderTimer = setInterval(showStaffReminder, REMINDER_INTERVAL_MS);
+}
+function stopStaffReminders(){
+  if(reminderTimer){ clearInterval(reminderTimer); reminderTimer=null; }
+}
+function handleReminderAction(action){
+  if(!state.isAdmin) return;
+  if(action==='visits') setView('admin-visits');
+  else if(action==='billing') setView('admin-billing');
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', (event)=>{
+    if(event.data && event.data.type==='staff-reminder-action') handleReminderAction(event.data.action);
+  });
+}
 
 /* ---------- PWA install ---------- */
 let deferredInstallPrompt = null;
@@ -1084,7 +1183,7 @@ async function loadDashboardStats(){
 }
 
 /* ---------- toast / router ---------- */
-function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=''; render(); }, 3000); }
+function showToast(msg, type){ state.toast=msg; state.toastType=type||'info'; render(); setTimeout(()=>{ state.toast=''; render(); }, 3000); }
 window.setView = async function(v){
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
@@ -1288,7 +1387,7 @@ function adminShell(content){
       <button onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>
       <button onclick="adminLogout()" style="color:#E2A08C;">Log out</button>
     </div>
-    <div class="admin-main">${state.toast?`<div class="top-alert">${escapeHtml(state.toast)}</div>`:''}${content}</div>
+    <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${content}</div>
   </div>`;
 }
 function viewAdminDashboard(){
@@ -1627,6 +1726,17 @@ function viewAdminInfo(){
         <div class="field"><label>Founder photo URL (optional)</label><input id="if-founder-photo" type="text" placeholder="https://…" value="${escapeHtml(i.founderPhotoUrl||'')}"></div>
         <div class="field"><label>UPI ID (for bill payments)</label><input id="if-upi" type="text" placeholder="yourname@bank" value="${escapeHtml(i.upiId||'')}"></div>
         <div class="field"><label>WhatsApp number (with country code)</label><input id="if-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.whatsapp||'')}"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
+    </div>
+    <h3>Email notifications</h3>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">Automatically emails the address below every time a patient visit or bill is saved. Uses <a href="https://www.emailjs.com" target="_blank" rel="noopener">EmailJS</a> (free tier available) to send straight from the browser — no server needed. Sign up, connect your email account, create one template with <code class="mono">to_email</code>, <code class="mono">subject</code> and <code class="mono">message</code> variables, then paste the three IDs below. Leave any field blank to turn this off.</p>
+      <div class="form-grid">
+        <div class="field"><label>Notify email</label><input id="if-notify-email" type="email" placeholder="you@example.com" value="${escapeHtml(i.notifyEmail||'')}"></div>
+        <div class="field"><label>EmailJS Public Key</label><input id="if-emailjs-key" type="text" value="${escapeHtml(i.emailjsPublicKey||'')}"></div>
+        <div class="field"><label>EmailJS Service ID</label><input id="if-emailjs-service" type="text" value="${escapeHtml(i.emailjsServiceId||'')}"></div>
+        <div class="field"><label>EmailJS Template ID</label><input id="if-emailjs-template" type="text" value="${escapeHtml(i.emailjsTemplateId||'')}"></div>
       </div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
