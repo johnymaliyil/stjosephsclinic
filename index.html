@@ -201,6 +201,7 @@ const DEFAULT_INFO = {
   upiId: "",
   whatsapp: "9048869262",
   notifyEmail: "drjosephvarkey@gmail.com",
+  notifyWhatsapp: "+919388823003",
   emailjsPublicKey: "",
   emailjsServiceId: "",
   emailjsTemplateId: "",
@@ -304,6 +305,7 @@ window.saveClinicInfo = async function(){
   i.upiId = document.getElementById('if-upi').value.trim();
   i.whatsapp = document.getElementById('if-whatsapp').value.trim();
   i.notifyEmail = document.getElementById('if-notify-email').value.trim();
+  i.notifyWhatsapp = document.getElementById('if-notify-whatsapp').value.trim();
   i.emailjsPublicKey = document.getElementById('if-emailjs-key').value.trim();
   i.emailjsServiceId = document.getElementById('if-emailjs-service').value.trim();
   i.emailjsTemplateId = document.getElementById('if-emailjs-template').value.trim();
@@ -610,6 +612,13 @@ window.saveVisitForm = async function(){
   showToast('👍 Visit saved!', 'success'); render();
   sendClinicEmail(`New patient visit — ${data.patientName}`, visitEmailText(data));
 };
+window.notifyDoctorVisit = function(visitId){
+  const v = state.data.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  const i = state.data.info;
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  window.open(waLinkWithText(i.notifyWhatsapp, visitEmailText(v)), '_blank');
+};
 window.sendPrescriptionWhatsApp = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
   if(!v) return;
@@ -854,6 +863,19 @@ window.sendBillWhatsApp = async function(id){
   const i = state.data.info;
   const msg = `Hi ${b.patientName}, here is your bill from ${i.clinicName}.\nBill No: ${b.billNumber}\nDate: ${b.date}\nTotal: ${money(b.grandTotal)}\nPayment: ${b.paymentMethod==='upi'?'UPI':'Cash'}\nThank you for visiting us.`;
   window.open(waLinkWithText(b.patientPhone, msg), '_blank');
+};
+window.notifyDoctorBill = async function(id){
+  let b = state.data.bills.find(x=>x.id===id);
+  if(!b){
+    try{
+      const snap = await getDoc(doc(db,'bills',id));
+      if(snap.exists()) b = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!b){ showToast('Could not find that bill.'); return; }
+  const i = state.data.info;
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  window.open(waLinkWithText(i.notifyWhatsapp, billEmailText(b)), '_blank');
 };
 window.billVisit = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
@@ -1501,6 +1523,7 @@ function viewAdminVisits(){
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
+      <button class="btn btn-outline btn-small" onclick="notifyDoctorVisit('${v.id}')">Notify Dr</button>
       <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
     </td>
   </tr>`).join('');
@@ -1588,7 +1611,7 @@ function viewAdminBilling(){
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
@@ -1729,7 +1752,7 @@ function viewAdminInfo(){
       </div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
-    <h3>Email notifications</h3>
+    <h3>Notifications</h3>
     <div class="card" style="margin-bottom:20px;">
       <p style="color:var(--text-muted);font-size:13px;margin-top:0;">Automatically emails the address below every time a patient visit or bill is saved. Uses <a href="https://www.emailjs.com" target="_blank" rel="noopener">EmailJS</a> (free tier available) to send straight from the browser — no server needed. Sign up, connect your email account, create one template with <code class="mono">to_email</code>, <code class="mono">subject</code> and <code class="mono">message</code> variables, then paste the three IDs below. Leave any field blank to turn this off.</p>
       <div class="form-grid">
@@ -1738,6 +1761,8 @@ function viewAdminInfo(){
         <div class="field"><label>EmailJS Service ID</label><input id="if-emailjs-service" type="text" value="${escapeHtml(i.emailjsServiceId||'')}"></div>
         <div class="field"><label>EmailJS Template ID</label><input id="if-emailjs-template" type="text" value="${escapeHtml(i.emailjsTemplateId||'')}"></div>
       </div>
+      <p style="color:var(--text-muted);font-size:13px;">Also shows a "Notify Dr" button on saved visits and bills, which opens a pre-filled WhatsApp chat to the number below with the same details (no WhatsApp Business API, so a staff member still taps Send).</p>
+      <div class="field" style="max-width:280px;"><label>Notify WhatsApp number (with country code)</label><input id="if-notify-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.notifyWhatsapp||'')}"></div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
     <h3>Our Doctors</h3>${doctorEditor(i.doctors||[])}
