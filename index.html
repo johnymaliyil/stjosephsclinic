@@ -251,13 +251,17 @@ let state = {
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
+  labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
+  labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
+  editingLabRecord:null,
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
   backupExporting:'',
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], info:DEFAULT_INFO }
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
 let lastVisibleBillDoc = null;
+let lastVisibleLabRecordDoc = null;
 
 /* ---------- clinic info ---------- */
 const infoRef = doc(db,'clinicInfo','main');
@@ -989,6 +993,113 @@ function printBill(b){
   setTimeout(()=>w.print(), 300);
 }
 
+/* ---------- lab tests ---------- */
+async function loadLabRecordsPage(reset){
+  state.labRecordsLoading = true; render();
+  const term = state.labRecordsSearchTerm.trim().toLowerCase();
+  try{
+    let q;
+    if(!term){
+      q = reset || !lastVisibleLabRecordDoc
+        ? query(collection(db,'labRecords'), orderBy('createdAtMillis','desc'), limit(50))
+        : query(collection(db,'labRecords'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleLabRecordDoc), limit(50));
+    }else{
+      q = reset || !lastVisibleLabRecordDoc
+        ? query(collection(db,'labRecords'), orderBy('patientNameLower'), startAt(term), endAt(term+''), limit(50))
+        : query(collection(db,'labRecords'), orderBy('patientNameLower'), startAfter(lastVisibleLabRecordDoc), endAt(term+''), limit(50));
+    }
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.labRecords = reset ? docs : state.data.labRecords.concat(docs);
+    lastVisibleLabRecordDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleLabRecordDoc;
+    state.hasMoreLabRecords = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load lab tests — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.labRecordsLoading = false; render();
+}
+window.setLabRecordsSearchTerm = function(v){ state.labRecordsSearchTerm=v; lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); };
+window.loadMoreLabRecords = function(){ loadLabRecordsPage(false); };
+function resetLabRecordForm(){
+  state.editingLabRecord = null;
+  state.showLabRecordForm = false;
+  state.labRecordForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' };
+}
+window.setLabRecordPatientSearchField = function(field){
+  state.labRecordForm.patientSearchField = field;
+  state.labRecordForm.patientQuery = '';
+  state.labRecordForm.patientResults = [];
+  render();
+};
+window.searchLabRecordPatient = async function(term){
+  state.labRecordForm.patientQuery = term;
+  const t = term.trim().toLowerCase();
+  if(!t){ state.labRecordForm.patientResults = []; render(); return; }
+  try{
+    const fieldName = state.labRecordForm.patientSearchField==='opdNo' ? 'opdNo' : 'nameLower';
+    const value = fieldName==='opdNo' ? term.trim() : t;
+    const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
+    const snap = await getDocs(q);
+    state.labRecordForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
+  render();
+};
+window.selectLabRecordPatient = function(id){
+  const p = state.labRecordForm.patientResults.find(x=>x.id===id);
+  if(p){ state.labRecordForm.selectedPatient = p; state.labRecordForm.patientQuery=''; state.labRecordForm.patientResults=[]; }
+  render();
+};
+window.clearLabRecordPatient = function(){ state.labRecordForm.selectedPatient = null; render(); };
+window.editLabRecord = function(id){
+  const r = state.data.labRecords.find(x=>x.id===id);
+  if(!r) return;
+  state.editingLabRecord = r;
+  state.showLabRecordForm = true;
+  state.labRecordForm = {
+    patientQuery:'', patientResults:[], patientSearchField:'name',
+    selectedPatient:{ id:r.patientId, name:r.patientName, opdNo:r.patientOpdNo, phone:r.patientPhone },
+    date:r.date||todayISO(), details:r.details||'', amount:r.amount||''
+  };
+  render(); window.scrollTo(0,0);
+};
+window.deleteLabRecord = async function(id){
+  if(!confirm('Delete this lab test record? This cannot be undone.')) return;
+  try{
+    await deleteDoc(doc(db,'labRecords',id));
+  }catch(e){ console.error(e); showToast('Could not delete lab test record.'); return; }
+  lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
+};
+window.saveLabRecordForm = async function(){
+  const f = state.labRecordForm;
+  if(!f.selectedPatient){ showToast('Please select a patient for this lab test.'); return; }
+  const date = document.getElementById('lf-date').value;
+  const details = document.getElementById('lf-details').value.trim();
+  const amount = document.getElementById('lf-amount').value;
+  if(!date){ showToast('Please choose a date.'); return; }
+  if(!details){ showToast('Please describe the lab test(s).'); return; }
+  const data = {
+    patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
+    patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
+    date, details, amount:Number(amount)||0
+  };
+  try{
+    if(state.editingLabRecord){
+      await updateDoc(doc(db,'labRecords',state.editingLabRecord.id), data);
+    }else{
+      data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
+      await addDoc(collection(db,'labRecords'), data);
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Could not save lab test — check the browser console for details.');
+    return;
+  }
+  resetLabRecordForm();
+  lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
+  showToast('👍 Lab test saved!', 'success'); render();
+};
+
 /* ---------- collections report ---------- */
 async function loadCollectionsReport(){
   state.reportLoading = true; render();
@@ -1131,6 +1242,12 @@ window.exportAppointments = function(){
     {label:'Reason', value:'reason'}, {label:'Status', value:'status'}, {label:'Requested At', value:'createdAt'}
   ], 'appointment-requests');
 };
+window.exportLabRecords = function(){
+  runExport('Lab tests', 'labRecords', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'}, {label:'OPD No.', value:'patientOpdNo'},
+    {label:'Phone', value:'patientPhone'}, {label:'Details', value:'details'}, {label:'Amount', value:'amount'}
+  ], 'lab-tests');
+};
 
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
@@ -1265,6 +1382,7 @@ window.setView = async function(v){
   if(v==='admin-dashboard') await loadDashboardStats();
   if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
   if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
+  if(v==='admin-labtests'){ resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true); }
   if(v==='admin-billing'){
     state.billsSearchTerm=''; lastVisibleBillDoc=null;
     await Promise.all([loadBillsPage(true), loadMedicines()]);
@@ -1447,7 +1565,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-labtests','Lab Tests'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
     ['admin-appointments','Appointment Requests'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -1607,6 +1725,58 @@ function viewAdminVisits(){
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
     ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
+  `);
+}
+function viewAdminLabTests(){
+  const f = state.labRecordForm;
+  const patientBlock = f.selectedPatient
+    ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><strong>${escapeHtml(f.selectedPatient.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedPatient.opdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(f.selectedPatient.phone||'')}</span></div>
+        <button class="btn btn-outline btn-small" onclick="clearLabRecordPatient()">Change</button>
+      </div>`
+    : `<div>
+        <div class="search-row">
+          <select onchange="setLabRecordPatientSearchField(this.value)">
+            <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
+            <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
+          </select>
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchLabRecordPatient(this.value)">
+        </div>
+        ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectLabRecordPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
+      </div>`;
+  const showForm = state.editingLabRecord || state.showLabRecordForm;
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showLabRecordForm=true; render();">+ New lab test</button></div>` : `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">${state.editingLabRecord?'Edit lab test':'Record a lab test'}</h3>
+    <div class="field"><label>Patient</label>${patientBlock}</div>
+    <div class="form-grid">
+      <div class="field"><label>Date</label><input id="lf-date" type="date" value="${escapeHtml(f.date)}"></div>
+      <div class="field"><label>Amount (₹)</label><input id="lf-amount" type="number" min="0" step="0.01" value="${escapeHtml(f.amount)}"></div>
+    </div>
+    <div class="field"><label>Test details</label><textarea id="lf-details" rows="2" placeholder="e.g. HbA1c, Fasting Blood Sugar — via Thyrocare">${escapeHtml(f.details)}</textarea></div>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveLabRecordForm()">${state.editingLabRecord?'Save changes':'Save lab test'}</button>
+      <button class="btn btn-outline" onclick="resetLabRecordForm(); render();">Cancel</button>
+    </div>
+  </div>`;
+  const rows = state.data.labRecords.map(r=>`<tr>
+    <td class="mono">${escapeHtml(r.date)}</td>
+    <td>${escapeHtml(r.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
+    <td>${escapeHtml(r.details||'')}</td>
+    <td class="mono">₹${Number(r.amount||0).toFixed(2)}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editLabRecord('${r.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteLabRecord('${r.id}')">Delete</button></td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Lab Tests</h2>
+    ${formCard}
+    <div class="search-row" style="margin-bottom:16px;">
+      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.labRecordsSearchTerm)}" oninput="setLabRecordsSearchTerm(this.value)">
+    </div>
+    <div class="table-wrap">
+      ${state.labRecordsLoading? loadingSkeleton(6) :
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Details</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">🧪</div>No lab tests recorded yet.</div>`}
+    </div>
+    ${(!state.labRecordsLoading && state.hasMoreLabRecords) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreLabRecords()">Load 50 more</button></div>` : ''}
   `);
 }
 function viewAdminBilling(){
@@ -1778,6 +1948,7 @@ function viewAdminBackup(){
   const items = [
     {key:'exportPatients', label:'Patients', icon:'📋', title:'Patients (OPD Register)', desc:'OPD number, name, address, phone, gender, age and registration date for every registered patient.'},
     {key:'exportVisits', label:'Patient visits', icon:'🩺', title:'Patient Visits', desc:'Every visit: date, patient, doctor, reason, prescribed medicines and dosage, and whether it was billed.'},
+    {key:'exportLabRecords', label:'Lab tests', icon:'🧪', title:'Lab Tests', desc:'Every lab test recorded: date, patient, test details and amount.'},
     {key:'exportBills', label:'Bills', icon:'🧾', title:'Billing', desc:'Every bill: bill number, patient, medicine/service/consultation totals, grand total and payment method.'},
     {key:'exportMedicines', label:'Medicine inventory', icon:'💊', title:'Medicine Inventory', desc:'Current stock list: name, batch, expiry, quantity, unit, reorder level and price.'},
     {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'}
@@ -1864,6 +2035,7 @@ function render(){
       case 'admin-dashboard': html=viewAdminDashboard(); break;
       case 'admin-patients': html=viewAdminPatients(); break;
       case 'admin-visits': html=viewAdminVisits(); break;
+      case 'admin-labtests': html=viewAdminLabTests(); break;
       case 'admin-billing': html=viewAdminBilling(); break;
       case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
