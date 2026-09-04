@@ -102,6 +102,13 @@
   .top-alert{background:var(--accent-soft);color:#5A3D0E;border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;animation:toastIn .25s ease;}
   .top-alert-success{background:var(--success-soft);color:#1F4A32;border-color:var(--success);font-weight:600;animation:toastPop .4s ease;}
   .public-toast-fixed{position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:100;max-width:min(90vw,420px);box-shadow:0 4px 14px rgba(0,0,0,.15);margin-bottom:0;}
+  .ad-banner{background:linear-gradient(90deg,var(--accent),#D9A94E);overflow:hidden;}
+  .ad-banner a{display:block;text-decoration:none;color:#2A1D06;}
+  .ad-marquee{overflow:hidden;white-space:nowrap;padding:9px 0;}
+  .ad-marquee-track{display:inline-flex;animation:adMarquee 22s linear infinite;}
+  .ad-marquee-track span{padding:0 36px;font-weight:700;font-size:14px;letter-spacing:.01em;flex-shrink:0;}
+  @keyframes adMarquee{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+  @media (prefers-reduced-motion:reduce){.ad-marquee-track{animation:none;}.ad-marquee{overflow-x:auto;}}
   @keyframes toastIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
   @keyframes toastPop{0%{opacity:0;transform:translateY(-6px) scale(.92);}60%{opacity:1;transform:translateY(0) scale(1.04);}100%{transform:scale(1);}}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
@@ -191,6 +198,15 @@ function loadingSkeleton(rows){
   return `<div style="padding:4px 0;">${Array.from({length:rows||5}).map((_,i)=>`<div class="skeleton-row" style="width:${widths[i%widths.length]};"></div>`).join('')}</div>`;
 }
 function waLink(phone){ return 'https://wa.me/'+String(phone||'').replace(/[^0-9]/g,''); }
+function telLink(phone){ return 'tel:'+String(phone||'').replace(/[^0-9+]/g,''); }
+function adBannerHtml(){
+  const i = state.data.info;
+  if(!i.adEnabled || !(i.adText||'').trim()) return '';
+  const item = `<span>${escapeHtml(i.adText)}${i.adPhone?` — ${escapeHtml(i.adPhone)}`:''}</span>`;
+  return `<div class="ad-banner"><a href="${telLink(i.adPhone)}" aria-label="Call about this ad">
+    <div class="ad-marquee"><div class="ad-marquee-track">${item}${item}</div></div>
+  </a></div>`;
+}
 function whatsappFloatButton(){
   const i = state.data.info;
   if(!i.whatsapp) return '';
@@ -219,6 +235,9 @@ const DEFAULT_INFO = {
   emailjsPublicKey: "",
   emailjsServiceId: "",
   emailjsTemplateId: "",
+  adEnabled: true,
+  adText: "🏢 Looking for an office, clinic, lab or institute space? Get in touch!",
+  adPhone: "+919388823003",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
@@ -335,6 +354,9 @@ window.saveClinicInfo = async function(){
   i.emailjsPublicKey = document.getElementById('if-emailjs-key').value.trim();
   i.emailjsServiceId = document.getElementById('if-emailjs-service').value.trim();
   i.emailjsTemplateId = document.getElementById('if-emailjs-template').value.trim();
+  i.adEnabled = document.getElementById('if-ad-enabled').checked;
+  i.adText = document.getElementById('if-ad-text').value.trim();
+  i.adPhone = document.getElementById('if-ad-phone').value.trim();
   await setDoc(infoRef, i);
   initEmailjs();
   showToast('Clinic info saved.');
@@ -1516,7 +1538,7 @@ function blogPreviewHtml(){
 }
 function viewHome(){
   const i=state.data.info;
-  return `${publicHeader()}
+  return `${publicHeader()}${adBannerHtml()}
   <div class="container hero">
     <h1 class="display">${escapeHtml(i.tagline)}</h1>
     <p class="lead">Register for an OPD visit, check our services and lab tests, or request an appointment online.</p>
@@ -2065,6 +2087,14 @@ function viewAdminInfo(){
       </div>
       <p style="color:var(--text-muted);font-size:13px;">Also shows a "Notify Dr" button on saved visits and bills, which opens a pre-filled WhatsApp chat to the number below with the same details (no WhatsApp Business API, so a staff member still taps Send).</p>
       <div class="field" style="max-width:280px;"><label>Notify WhatsApp number (with country code)</label><input id="if-notify-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.notifyWhatsapp||'')}"></div>
+      <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
+    </div>
+    <h3>Home Page Banner</h3>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">A scrolling banner at the top of the Home page — handy for a one-off announcement (e.g. property to rent). Tapping it calls the phone number below.</p>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);margin-bottom:14px;"><input id="if-ad-enabled" type="checkbox" style="width:auto;" ${i.adEnabled?'checked':''}> Show banner on Home page</label>
+      <div class="field"><label>Banner text</label><textarea id="if-ad-text" rows="2">${escapeHtml(i.adText||'')}</textarea></div>
+      <div class="field" style="max-width:280px;"><label>Contact number (with country code)</label><input id="if-ad-phone" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.adPhone||'')}"></div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
     <h3>Our Doctors</h3>${doctorEditor(i.doctors||[])}
