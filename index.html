@@ -262,6 +262,7 @@ const DEFAULT_INFO = {
   emailjsPublicKey: "",
   emailjsServiceId: "",
   emailjsTemplateId: "",
+  gaMeasurementId: "",
   adEnabled: true,
   adText: "🏢 Looking for an office, clinic, lab or institute space? Get in touch!",
   adPhone: "+919388823003",
@@ -319,12 +320,32 @@ async function loadClinicInfo(){
   if(snap.exists()){ state.data.info = Object.assign({}, DEFAULT_INFO, snap.data()); }
   else{ state.data.info = DEFAULT_INFO; await setDoc(infoRef, DEFAULT_INFO); }
   initEmailjs();
+  initGoogleAnalytics();
 }
 function initEmailjs(){
   const i = state.data.info;
   if(window.emailjs && i.emailjsPublicKey){
     try{ window.emailjs.init({publicKey:i.emailjsPublicKey}); }catch(e){}
   }
+}
+function initGoogleAnalytics(){
+  const i = state.data.info;
+  if(!i.gaMeasurementId || window.__gaLoaded) return;
+  window.__gaLoaded = true;
+  const s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(i.gaMeasurementId);
+  document.head.appendChild(s);
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function(){ window.dataLayer.push(arguments); };
+  window.gtag('js', new Date());
+  window.gtag('config', i.gaMeasurementId, { send_page_view:false });
+  if(!state.view.startsWith('admin-')) trackPageView();
+}
+function trackPageView(){
+  const i = state.data.info;
+  if(!(window.gtag && i.gaMeasurementId)) return;
+  window.gtag('event', 'page_view', { page_path:'/'+state.view, page_title:state.view, page_location:location.href });
 }
 function sendClinicEmail(subject, message){
   const i = state.data.info;
@@ -402,8 +423,10 @@ window.saveClinicInfo = async function(){
   i.adPhone = document.getElementById('if-ad-phone').value.trim();
   i.popupEnabled = document.getElementById('if-popup-enabled').checked;
   i.popupText = document.getElementById('if-popup-text').value.trim();
+  i.gaMeasurementId = document.getElementById('if-ga-id').value.trim();
   await setDoc(infoRef, i);
   initEmailjs();
+  initGoogleAnalytics();
   showToast('Clinic info saved.');
 };
 window.doctorEditor = null; // placeholder, real fn below
@@ -1518,6 +1541,7 @@ window.setView = async function(v){
   resetBillForm();
   if(v.startsWith('admin-') && v!=='admin-login'){ try{ localStorage.setItem('lastAdminView', v); }catch(e){} }
   render(); window.scrollTo(0,0);
+  if(!v.startsWith('admin-')) trackPageView();
   if(v==='home'||v==='blog') await loadBlogPosts();
   if(v==='admin-dashboard') await loadDashboardStats();
   if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
@@ -2177,6 +2201,12 @@ function viewAdminInfo(){
       <div class="field" style="max-width:280px;"><label>Notify WhatsApp number (with country code)</label><input id="if-notify-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.notifyWhatsapp||'')}"></div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
+    <h3>Website Traffic</h3>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">See how many people visit the site, which pages they view, and where they come from. Create a free <a href="https://analytics.google.com" target="_blank" rel="noopener">Google Analytics</a> property for this website, copy its Measurement ID (looks like <code class="mono">G-XXXXXXXXXX</code>) and paste it below. Leave blank to turn tracking off — nothing is sent until an ID is set. Only visitor-facing pages are tracked, not the staff admin area.</p>
+      <div class="field" style="max-width:280px;"><label>Google Analytics Measurement ID</label><input id="if-ga-id" type="text" placeholder="G-XXXXXXXXXX" value="${escapeHtml(i.gaMeasurementId||'')}"></div>
+      <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
+    </div>
     <h3>Home Page Banner</h3>
     <div class="card" style="margin-bottom:20px;">
       <p style="color:var(--text-muted);font-size:13px;margin-top:0;">A scrolling banner at the top of the Home page — handy for a one-off announcement (e.g. property to rent). Tapping it calls the phone number below.</p>
@@ -2265,6 +2295,7 @@ async function initApp(){
     state.showPromoPopup = true;
   }
   render();
+  trackPageView();
 }
 initApp();
 </script>
