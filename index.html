@@ -101,6 +101,7 @@
   .row-actions{display:flex;gap:6px;}
   .top-alert{background:var(--accent-soft);color:#5A3D0E;border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:18px;animation:toastIn .25s ease;}
   .top-alert-success{background:var(--success-soft);color:#1F4A32;border-color:var(--success);font-weight:600;animation:toastPop .4s ease;}
+  .public-toast-fixed{position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:100;max-width:min(90vw,420px);box-shadow:0 4px 14px rgba(0,0,0,.15);margin-bottom:0;}
   @keyframes toastIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
   @keyframes toastPop{0%{opacity:0;transform:translateY(-6px) scale(.92);}60%{opacity:1;transform:translateY(0) scale(1.04);}100%{transform:scale(1);}}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
@@ -256,7 +257,7 @@ let state = {
   editingLabRecord:null,
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
   backupExporting:'',
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], info:DEFAULT_INFO }
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
@@ -440,6 +441,29 @@ window.sendAppointmentWhatsApp = function(id){
   const i = state.data.info;
   const msg = `Hi ${a.name}, this is ${i.clinicName} regarding your appointment request${a.date?` for ${a.date}`:''}.`;
   window.open(waLinkWithText(a.phone, msg), '_blank');
+};
+
+/* ---------- feedback ---------- */
+async function loadFeedback(){
+  const snap = await getDocs(collection(db,'feedback'));
+  state.data.feedback = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+}
+window.submitFeedback = async function(){
+  const name=document.getElementById('fb-name').value.trim();
+  const phone=document.getElementById('fb-phone').value.trim();
+  const rating=Number(document.getElementById('fb-rating').value);
+  const message=document.getElementById('fb-message').value.trim();
+  if(!message){ showToast('Please share a few words of feedback.'); return; }
+  await addDoc(collection(db,'feedback'), {name, phone, rating, message, createdAt:new Date().toISOString()});
+  setView('home'); showToast('Thank you for your feedback!', 'success');
+};
+window.deleteFeedback = async function(id){ await deleteDoc(doc(db,'feedback',id)); await loadFeedback(); render(); };
+window.sendFeedbackWhatsApp = function(id){
+  const f = state.data.feedback.find(x=>x.id===id);
+  if(!f) return;
+  if(!f.phone){ showToast('No phone number on file for this feedback.'); return; }
+  const i = state.data.info;
+  window.open(waLinkWithText(f.phone, `Hi ${f.name||'there'}, thank you for your feedback — ${i.clinicName}.`), '_blank');
 };
 
 /* ---------- patients (paginated + indexed search) ---------- */
@@ -1242,6 +1266,12 @@ window.exportAppointments = function(){
     {label:'Reason', value:'reason'}, {label:'Status', value:'status'}, {label:'Requested At', value:'createdAt'}
   ], 'appointment-requests');
 };
+window.exportFeedback = function(){
+  runExport('Feedback', 'feedback', null, [
+    {label:'Name', value:v=>v.name||'Anonymous'}, {label:'Phone', value:'phone'}, {label:'Rating', value:'rating'},
+    {label:'Message', value:'message'}, {label:'Submitted At', value:'createdAt'}
+  ], 'feedback');
+};
 window.exportLabRecords = function(){
   runExport('Lab tests', 'labRecords', 'createdAtMillis', [
     {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'}, {label:'OPD No.', value:'patientOpdNo'},
@@ -1391,6 +1421,7 @@ window.setView = async function(v){
   if(v==='admin-reports') await loadCollectionsReport();
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
+  if(v==='admin-feedback') await loadFeedback();
   render();
 };
 function setView(v){ window.setView(v); }
@@ -1440,7 +1471,7 @@ function founderHtml(i){
 
 /* ---------- public views ---------- */
 function publicHeader(){
-  const links=[['home','Home'],['about','About'],['services','Services & Lab'],['blog','Blog'],['book','Book Appointment']];
+  const links=[['home','Home'],['about','About'],['services','Services & Lab'],['blog','Blog'],['book','Book Appointment'],['feedback','Feedback']];
   return `<header class="site"><div class="container nav-row">
     <div class="logo">${logoMark()} ${escapeHtml(state.data.info.clinicName)}</div>
     <nav class="links">
@@ -1552,6 +1583,26 @@ function viewBook(){
     <button class="btn btn-primary" onclick="submitAppointment()">Submit request</button>
   </div></section></div>${publicFooter()}`;
 }
+function viewFeedback(){
+  return `${publicHeader()}<div class="container"><section style="max-width:500px;">
+  <h2 class="display">Share your feedback</h2>
+  <p style="color:var(--text-muted);">We'd love to hear about your experience at the clinic — it helps us do better.</p>
+  <div class="card">
+    <div class="field"><label>Your name (optional)</label><input id="fb-name" type="text"></div>
+    <div class="field"><label>Phone (optional)</label><input id="fb-phone" type="text"></div>
+    <div class="field"><label>Rating</label>
+      <select id="fb-rating">
+        <option value="5">★★★★★ Excellent</option>
+        <option value="4">★★★★ Good</option>
+        <option value="3">★★★ Average</option>
+        <option value="2">★★ Below average</option>
+        <option value="1">★ Poor</option>
+      </select>
+    </div>
+    <div class="field"><label>Your feedback</label><textarea id="fb-message" rows="4" placeholder="Tell us what went well, or what we could do better…"></textarea></div>
+    <button class="btn btn-primary" onclick="submitFeedback()">Submit feedback</button>
+  </div></section></div>${publicFooter()}`;
+}
 function viewAdminLogin(){
   return `${publicHeader()}<div class="container"><section style="max-width:360px;">
   <h2 class="display">Staff login</h2>
@@ -1566,7 +1617,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-labtests','Lab Tests'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
-    ['admin-appointments','Appointment Requests'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -1943,6 +1994,17 @@ function viewAdminAppointments(){
   return adminShell(`<h2 class="display">Appointment Requests</h2>
     <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
 }
+function viewAdminFeedback(){
+  const stars = n => '★'.repeat(n) + '☆'.repeat(5-n);
+  const rows=state.data.feedback.map(f=>`<tr>
+    <td class="mono" style="white-space:nowrap;">${escapeHtml((f.createdAt||'').slice(0,10))}</td>
+    <td>${escapeHtml(f.name||'Anonymous')}${f.phone?`<br><span class="mono" style="color:var(--text-muted);font-size:12px;">${escapeHtml(f.phone)}</span>`:''}</td>
+    <td class="mono" style="color:var(--accent);white-space:nowrap;">${stars(f.rating||0)}</td>
+    <td>${escapeHtml(f.message||'')}</td>
+    <td class="row-actions">${f.phone?`<button class="btn btn-outline btn-small" onclick="sendFeedbackWhatsApp('${f.id}')">WhatsApp</button>`:''}<button class="btn btn-danger btn-small" onclick="deleteFeedback('${f.id}')">Delete</button></td></tr>`).join('');
+  return adminShell(`<h2 class="display">Feedback</h2>
+    <div class="table-wrap">${state.data.feedback.length?`<table><thead><tr><th>Date</th><th>From</th><th>Rating</th><th>Message</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💬</div>No feedback submitted yet.</div>`}</div>`);
+}
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
   const items = [
@@ -1951,7 +2013,8 @@ function viewAdminBackup(){
     {key:'exportLabRecords', label:'Lab tests', icon:'🧪', title:'Lab Tests', desc:'Every lab test recorded: date, patient, test details and amount.'},
     {key:'exportBills', label:'Bills', icon:'🧾', title:'Billing', desc:'Every bill: bill number, patient, medicine/service/consultation totals, grand total and payment method.'},
     {key:'exportMedicines', label:'Medicine inventory', icon:'💊', title:'Medicine Inventory', desc:'Current stock list: name, batch, expiry, quantity, unit, reorder level and price.'},
-    {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'}
+    {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'},
+    {key:'exportFeedback', label:'Feedback', icon:'💬', title:'Feedback', desc:'All feedback submitted from the website, with rating.'}
   ];
   const cards = items.map(it=>{
     const isThis = busy && state.backupExporting.startsWith(it.label);
@@ -2043,10 +2106,21 @@ function render(){
       case 'admin-backup': html=viewAdminBackup(); break;
       case 'admin-info': html=viewAdminInfo(); break;
       case 'admin-blog': html=viewAdminBlog(); break;
+      case 'feedback': html=viewFeedback(); break;
+      case 'admin-feedback': html=viewAdminFeedback(); break;
       default: html=viewHome();
     }
   }
   app.innerHTML = html;
+  const existingToast = document.getElementById('public-toast');
+  if(existingToast) existingToast.remove();
+  if(state.toast && !state.view.startsWith('admin-')){
+    const el = document.createElement('div');
+    el.id = 'public-toast';
+    el.className = 'top-alert public-toast-fixed' + (state.toastType==='success' ? ' top-alert-success' : '');
+    el.textContent = state.toast;
+    document.body.appendChild(el);
+  }
 }
 window.render = render;
 window.state = state;
