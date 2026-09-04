@@ -163,6 +163,19 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 const auth = getAuth(fbApp);
 
+// Backstop for bugs: without this, an unexpected error anywhere (a typo, a missing
+// field on old data, a third-party script failing) aborts silently -- no toast, no
+// save, nothing on screen -- which is indistinguishable from the button just not
+// working. Surface it instead, so it's visible without opening DevTools.
+window.addEventListener('error', (e)=>{
+  console.error('Uncaught error:', e.error||e.message);
+  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.error&&e.error.message)||e.message||'unknown error'}. Please try again.`); }catch(_){}
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  console.error('Unhandled promise rejection:', e.reason);
+  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.reason&&e.reason.message)||e.reason||'unknown error'}. Please try again.`); }catch(_){}
+});
+
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function monthStartISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
