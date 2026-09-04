@@ -545,7 +545,7 @@ window.searchVisitPatient = async function(term){
     const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
   render();
 };
 window.selectVisitPatient = function(id){
@@ -740,7 +740,7 @@ window.searchBillVisit = async function(term){
     const q = query(collection(db,'visits'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error(e); showToast(`Visit search failed: ${e.message||e}`); }
   render();
 };
 window.selectBillVisit = function(visitId){
