@@ -109,6 +109,15 @@
   .ad-marquee-track span{padding:0 36px;font-weight:700;font-size:14px;letter-spacing:.01em;flex-shrink:0;}
   @keyframes adMarquee{from{transform:translateX(0);}to{transform:translateX(-50%);}}
   @media (prefers-reduced-motion:reduce){.ad-marquee-track{animation:none;}.ad-marquee{overflow-x:auto;}}
+  .promo-overlay{position:fixed;inset:0;background:rgba(21,53,48,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;animation:promoFadeIn .2s ease;}
+  .promo-modal{position:relative;background:var(--surface);border-radius:14px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;padding:26px 22px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25);animation:promoPopIn .25s ease;}
+  .promo-close{position:absolute;top:10px;right:10px;background:var(--surface-soft);border:none;border-radius:50%;width:30px;height:30px;font-size:15px;line-height:1;color:var(--text-muted);cursor:pointer;}
+  .promo-close:hover{background:var(--danger-soft);color:var(--danger);}
+  .promo-body{white-space:pre-wrap;font-size:14px;line-height:1.65;}
+  .promo-body a{color:var(--primary);font-weight:700;}
+  @keyframes promoFadeIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes promoPopIn{from{opacity:0;transform:scale(.94) translateY(6px);}to{opacity:1;transform:scale(1) translateY(0);}}
+  @media (prefers-reduced-motion:reduce){.promo-overlay,.promo-modal{animation:none;}}
   @keyframes toastIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
   @keyframes toastPop{0%{opacity:0;transform:translateY(-6px) scale(.92);}60%{opacity:1;transform:translateY(0) scale(1.04);}100%{transform:scale(1);}}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
@@ -207,6 +216,24 @@ function adBannerHtml(){
     <div class="ad-marquee"><div class="ad-marquee-track">${item}${item}</div></div>
   </a></div>`;
 }
+function linkifyPhones(escapedText){
+  return escapedText.replace(/(\+?\d[\d\-\s]{7,14}\d)/g, m => `<a href="tel:${m.replace(/[^\d+]/g,'')}">${m}</a>`);
+}
+function promoPopupHtml(){
+  const i = state.data.info;
+  if(!state.showPromoPopup || !i.popupEnabled || !(i.popupText||'').trim() || state.view.startsWith('admin-')) return '';
+  return `<div class="promo-overlay" onclick="if(event.target===this) closePromoPopup()">
+    <div class="promo-modal">
+      <button class="promo-close" onclick="closePromoPopup()" aria-label="Close">✕</button>
+      <div class="promo-body">${linkifyPhones(escapeHtml(i.popupText))}</div>
+    </div>
+  </div>`;
+}
+window.closePromoPopup = function(){
+  state.showPromoPopup = false;
+  try{ sessionStorage.setItem('stjosephs_promo_seen','1'); }catch(e){}
+  render();
+};
 function whatsappFloatButton(){
   const i = state.data.info;
   if(!i.whatsapp) return '';
@@ -238,6 +265,8 @@ const DEFAULT_INFO = {
   adEnabled: true,
   adText: "🏢 Looking for an office, clinic, lab or institute space? Get in touch!",
   adPhone: "+919388823003",
+  popupEnabled: true,
+  popupText: "🍃 ഓണത്തിനുശേഷം ഒരു ആരോഗ്യ പരിശോധന നടത്തിയാലോ? 🍃\nഉത്സവകാല ഭക്ഷണശൈലിയും ജീവിതരീതിയും ആരോഗ്യത്തെ എങ്ങനെ ബാധിച്ചുവെന്ന് അറിയാൻ സമ്പൂർണ ഹെൽത്ത് ചെക്കപ്പ് ചെയ്യൂ.\n\n🩺 106 Parameters Health Package\n💰 ഓഫർ വില ₹1999/- മാത്രം\n\n🔹 Thyroid, Liver, Kidney & Lipid Profile\n🔹 Diabetes Screening (HbA1c & Fasting Blood Sugar)\n🔹 CBC & Complete Urine Analysis\n🔹 Cardiac Risk Assessment (Apo A1, Apo B, hs-CRP, Lipoprotein(a))\n🔹 Vitamins B12, D & Folate\n🔹 Iron Deficiency Profile (Iron, Ferritin, Transferrin Saturation)\n🔹 Calcium, Uric Acid & Electrolytes (Sodium, Chloride)\n🔹 ESR (Inflammation Marker)\n\n📌 10-12 മണിക്കൂർ ഉപവാസം (Fasting) ആവശ്യമാണ്.\n\n📱 9142302004 | 9744239363\n📍 Thyrocare, St Joseph's Clinic, Near Silver Hills NAXA Cinemas, Thodupuzha\n☎️ 04862-222620\n\n🌿 \"ആരോഗ്യമാണ് ഏറ്റവും വലിയ സമ്പത്ത്. ഇന്ന് തന്നെ പരിശോധന ബുക്ക് ചെയ്യൂ!\"",
   doctors: [
     { name: "Dr. Joseph Varkey", qualification: "MBBS, MD", role: "In-house Pediatrician", whatsapp: "+919388823003", email: "drjosephvarkey@gmail.com" },
     { name: "Dr. Mathew Varkey", qualification: "MBBS, MD (Physician & Diabetologist)", role: "Visiting Consultant", whatsapp: "", email: "malymatu@gmail.com" },
@@ -259,7 +288,7 @@ const DEFAULT_INFO = {
 
 let state = {
   view:'home', isAdmin:false, loginError:'', toast:'',
-  showInstallButton:false, showIosInstallHint:false,
+  showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
@@ -357,6 +386,8 @@ window.saveClinicInfo = async function(){
   i.adEnabled = document.getElementById('if-ad-enabled').checked;
   i.adText = document.getElementById('if-ad-text').value.trim();
   i.adPhone = document.getElementById('if-ad-phone').value.trim();
+  i.popupEnabled = document.getElementById('if-popup-enabled').checked;
+  i.popupText = document.getElementById('if-popup-text').value.trim();
   await setDoc(infoRef, i);
   initEmailjs();
   showToast('Clinic info saved.');
@@ -2138,6 +2169,13 @@ function viewAdminInfo(){
       <div class="field" style="max-width:280px;"><label>Contact number (with country code)</label><input id="if-ad-phone" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.adPhone||'')}"></div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
+    <h3>Announcement Popup</h3>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">A pop-up shown once per visit to website visitors — handy for a limited-time offer (e.g. a health check-up package). Phone numbers in the text become tap-to-call links automatically. Turn it off once the offer ends.</p>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);margin-bottom:14px;"><input id="if-popup-enabled" type="checkbox" style="width:auto;" ${i.popupEnabled?'checked':''}> Show popup to visitors</label>
+      <div class="field"><label>Popup message</label><textarea id="if-popup-text" rows="12">${escapeHtml(i.popupText||'')}</textarea></div>
+      <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
+    </div>
     <h3>Our Doctors</h3>${doctorEditor(i.doctors||[])}
     <h3>Clinical services</h3>${listEditor('services', i.services)}
     <h3>Lab tests</h3>${listEditor('labTests', i.labTests)}
@@ -2188,7 +2226,7 @@ function render(){
       default: html=viewHome();
     }
   }
-  app.innerHTML = html;
+  app.innerHTML = html + promoPopupHtml();
   const existingToast = document.getElementById('public-toast');
   if(existingToast) existingToast.remove();
   if(state.toast && !state.view.startsWith('admin-')){
@@ -2205,6 +2243,11 @@ window.state = state;
 async function initApp(){
   await loadClinicInfo();
   await loadBlogPosts();
+  let seen = false;
+  try{ seen = sessionStorage.getItem('stjosephs_promo_seen')==='1'; }catch(e){}
+  if(!seen && state.data.info.popupEnabled && (state.data.info.popupText||'').trim() && !state.view.startsWith('admin-')){
+    state.showPromoPopup = true;
+  }
   render();
 }
 initApp();
