@@ -246,7 +246,7 @@ let state = {
   patientCount:null, visitCount:null,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}] },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -294,10 +294,18 @@ function billEmailText(b){
   lines.push('', `Consultation fee: ₹${Number(b.consultationFee||0).toFixed(2)}`, `Total: ₹${Number(b.grandTotal||0).toFixed(2)}`, `Payment method: ${b.paymentMethod==='upi'?'UPI':'Cash'}`);
   return lines.join('\n');
 }
+function vitalsSummary(v){
+  return [
+    v.weight?`Wt ${v.weight} kg`:'', v.height?`Ht ${v.height} cm`:'', v.bp?`BP ${v.bp}`:'',
+    v.sugarValue?`Sugar ${v.sugarValue} mg/dL${v.sugarType?` (${v.sugarType})`:''}`:''
+  ].filter(Boolean).join(' · ');
+}
 function visitEmailText(v){
   const lines = [`Patient visit — ${v.date}`, `Patient: ${v.patientName} (OPD ${v.patientOpdNo||'—'})`];
   if(v.patientPhone) lines.push(`Phone: ${v.patientPhone}`);
   lines.push(`Doctor: ${v.doctorName||'—'}`, `Reason: ${v.reason||'—'}`);
+  const vitals = vitalsSummary(v);
+  if(vitals) lines.push(`Vitals: ${vitals}`);
   if(v.medicines && v.medicines.length){
     lines.push('', 'Prescribed medicines:');
     v.medicines.forEach(m=>lines.push(`  - ${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`));
@@ -527,7 +535,21 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}] };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
+}
+async function loadLastVitals(patientId){
+  try{
+    // A plain equality filter (no orderBy on a different field) needs no composite
+    // index, unlike where()+orderBy() together -- sort client-side instead so this
+    // doesn't depend on an index existing.
+    const q = query(collection(db,'visits'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    if(snap.empty) return null;
+    const visits = snap.docs.map(d=>d.data()).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+    const v = visits.find(x=>x.weight||x.height||x.bp||x.sugarValue);
+    if(!v) return null;
+    return { date:v.date, weight:v.weight, height:v.height, bp:v.bp, sugarValue:v.sugarValue, sugarType:v.sugarType };
+  }catch(e){ console.error('Could not load last vitals', e); return null; }
 }
 window.setVisitPatientSearchField = function(field){
   state.visitForm.patientSearchField = field;
@@ -548,10 +570,14 @@ window.searchVisitPatient = async function(term){
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
   render();
 };
-window.selectVisitPatient = function(id){
+window.selectVisitPatient = async function(id){
   const p = state.visitForm.patientResults.find(x=>x.id===id);
-  if(p){ state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[]; }
+  if(p){ state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[]; state.visitForm.lastVitals=null; }
   render();
+  if(p){
+    state.visitForm.lastVitals = await loadLastVitals(p.id);
+    if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===p.id) render();
+  }
 };
 window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
 window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
@@ -565,7 +591,8 @@ window.editVisit = function(id){
     patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
-    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity,dosage:m.dosage||''})) : [{medicineId:'',quantity:'',dosage:''}]
+    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity,dosage:m.dosage||''})) : [{medicineId:'',quantity:'',dosage:''}],
+    weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null
   };
   render(); window.scrollTo(0,0);
 };
@@ -585,6 +612,11 @@ window.saveVisitForm = async function(){
   const date = document.getElementById('vf-date').value;
   const reason = document.getElementById('vf-reason').value.trim();
   const doctorName = document.getElementById('vf-doctor').value;
+  const weight = document.getElementById('vf-weight').value.trim();
+  const height = document.getElementById('vf-height').value.trim();
+  const bp = document.getElementById('vf-bp').value.trim();
+  const sugarValue = document.getElementById('vf-sugar-value').value.trim();
+  const sugarType = document.getElementById('vf-sugar-type').value;
   if(!date){ showToast('Please choose a visit date.'); return; }
   const medRows = f.meds.filter(m=>m.medicineId && Number(m.quantity)>0);
   const medicines = medRows.map(m=>{
@@ -594,7 +626,8 @@ window.saveVisitForm = async function(){
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
-    date, reason, doctorName, medicines
+    date, reason, doctorName, medicines,
+    weight, height, bp, sugarValue, sugarType: sugarValue ? sugarType : ''
   };
   const batch = writeBatch(db);
   if(state.editingVisit){
@@ -670,6 +703,7 @@ window.printPrescription = function(visitId){
     <strong>${escapeHtml(v.patientName)}</strong> &middot; OPD ${escapeHtml(v.patientOpdNo||'')}<br>
     ${escapeHtml(v.patientPhone||'')}
     ${v.reason?`<div style="margin-top:6px;"><span class="muted">REASON</span> ${escapeHtml(v.reason)}</div>`:''}
+    ${vitalsSummary(v)?`<div style="margin-top:6px;"><span class="muted">VITALS</span> ${escapeHtml(vitalsSummary(v))}</div>`:''}
   </div>
   <div class="rx-mark">℞</div>
   ${rxRows || '<p class="muted">No medicines prescribed on this visit.</p>'}
@@ -1069,6 +1103,8 @@ window.exportVisits = function(){
   runExport('Patient visits', 'visits', 'createdAtMillis', [
     {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'}, {label:'OPD No.', value:'patientOpdNo'},
     {label:'Phone', value:'patientPhone'}, {label:'Doctor', value:'doctorName'}, {label:'Reason', value:'reason'},
+    {label:'Weight (kg)', value:'weight'}, {label:'Height (cm)', value:'height'}, {label:'BP', value:'bp'},
+    {label:'Blood Sugar (mg/dL)', value:'sugarValue'}, {label:'Sugar Type', value:'sugarType'},
     {label:'Medicines', value:v=>(v.medicines||[]).map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
     {label:'Billed', value:v=>v.billId?'Yes':'No'}
   ], 'patient-visits');
@@ -1519,6 +1555,24 @@ function viewAdminVisits(){
       <div class="field"><label>Doctor</label><select id="vf-doctor"><option value="">— Not specified —</option>${doctorOptions}</select></div>
     </div>
     <div class="field"><label>Reason for visit</label><textarea id="vf-reason" rows="2">${escapeHtml(f.reason)}</textarea></div>
+    <label>Vitals (optional)</label>
+    ${f.lastVitals ? `<p style="color:var(--text-muted);font-size:12px;margin:0 0 8px;">Last recorded ${escapeHtml(f.lastVitals.date||'')}: ${[
+        f.lastVitals.weight?`Wt ${escapeHtml(f.lastVitals.weight)} kg`:'',
+        f.lastVitals.height?`Ht ${escapeHtml(f.lastVitals.height)} cm`:'',
+        f.lastVitals.bp?`BP ${escapeHtml(f.lastVitals.bp)}`:'',
+        f.lastVitals.sugarValue?`Sugar ${escapeHtml(f.lastVitals.sugarValue)} mg/dL (${escapeHtml(f.lastVitals.sugarType||'')})`:''
+      ].filter(Boolean).join(' · ')}</p>` : ''}
+    <div class="form-grid">
+      <div class="field"><label>Weight (kg)</label><input id="vf-weight" type="number" min="0" step="0.1" value="${escapeHtml(f.weight)}"></div>
+      <div class="field"><label>Height (cm)</label><input id="vf-height" type="number" min="0" step="0.1" value="${escapeHtml(f.height)}"></div>
+      <div class="field"><label>Blood pressure</label><input id="vf-bp" type="text" placeholder="e.g. 120/80" value="${escapeHtml(f.bp)}"></div>
+      <div class="field" style="grid-column:1/-1;max-width:340px;"><label>Blood sugar (mg/dL)</label>
+        <div style="display:flex;gap:6px;">
+          <input id="vf-sugar-value" type="number" min="0" value="${escapeHtml(f.sugarValue)}" style="flex:1;">
+          <select id="vf-sugar-type" style="flex:1;">${['Fasting','PP','Random'].map(t=>`<option value="${t}" ${f.sugarType===t?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>
     <label>Prescribed medicines</label>
     ${medRows}
     <button class="btn btn-outline btn-small" onclick="addVisitMedRow()">+ Add medicine</button>
@@ -1533,6 +1587,7 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
+    <td class="mono" style="font-size:12px;">${escapeHtml(vitalsSummary(v)) || '—'}</td>
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
@@ -1548,7 +1603,7 @@ function viewAdminVisits(){
     </div>
     <div class="table-wrap">
       ${state.visitsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
     ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
