@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="St Joseph's Clinic">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23C08A3E' stroke-width='2' fill='none'/%3E%3Cpath d='M10 33H24L28 18L36 48L41 33H54' stroke='%23F1ECDF' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23153530'/%3E%3Cpath d='M32 55 C13 42 5 29 5 18.5 C5 10 12 4 20 4 C26 4 30.5 7.5 32 12 C33.5 7.5 38 4 44 4 C52 4 59 10 59 18.5 C59 29 51 42 32 55 Z' stroke='%23F1ECDF' stroke-width='3' fill='none' stroke-linejoin='round'/%3E%3Cpath d='M9 30 H19 L24 18 L34 42 L39 26 H55' stroke='%23C08A3E' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -148,9 +148,9 @@
 <div id="app">
   <div class="app-loading">
     <div class="app-loading-mark">
-      <svg width="46" height="46" viewBox="0 0 30 30" fill="none">
-        <circle cx="15" cy="15" r="14" stroke="#C08A3E" stroke-width="1.5"/>
-        <path d="M4 15 H10 L12.5 8 L17 22 L19.5 15 H26" stroke="#1F4A42" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="46" height="46" viewBox="0 0 64 64" fill="none">
+        <path d="M32 55 C13 42 5 29 5 18.5 C5 10 12 4 20 4 C26 4 30.5 7.5 32 12 C33.5 7.5 38 4 44 4 C52 4 59 10 59 18.5 C59 29 51 42 32 55 Z" stroke="#1F4A42" stroke-width="3" fill="none" stroke-linejoin="round"/>
+        <path d="M9 30 H19 L24 18 L34 42 L39 26 H55" stroke="#C08A3E" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
     <div class="app-loading-name">St Joseph's Clinic</div>
@@ -365,6 +365,20 @@ function visitEmailText(v){
   }
   return lines.join('\n');
 }
+function appointmentEmailText(a){
+  const lines = [`New appointment request`, `Name: ${a.name}`, `Phone: ${a.phone}`];
+  if(a.date) lines.push(`Preferred date: ${a.date}`);
+  if(a.reason) lines.push(`Reason: ${a.reason}`);
+  return lines.join('\n');
+}
+function feedbackEmailText(f){
+  const lines = [`New patient feedback`];
+  lines.push(`Name: ${f.name||'Anonymous'}`);
+  if(f.phone) lines.push(`Phone: ${f.phone}`);
+  if(f.rating) lines.push(`Rating: ${f.rating}/5`);
+  lines.push('', f.message||'');
+  return lines.join('\n');
+}
 window.saveClinicInfo = async function(){
   const i = state.data.info;
   i.clinicName = document.getElementById('if-name').value.trim() || i.clinicName;
@@ -521,6 +535,7 @@ window.submitAppointment = async function(){
   if(!name || !phone){ showToast('Please enter your name and phone number.'); return; }
   await addDoc(collection(db,'appointments'), {name,phone,date,reason,status:'pending',createdAt:new Date().toISOString()});
   setView('home'); showToast('Appointment request sent. We will contact you to confirm.');
+  sendClinicEmail(`New appointment request — ${name}`, appointmentEmailText({name,phone,date,reason}));
 };
 window.updateAppointmentStatus = async function(id,status){
   await updateDoc(doc(db,'appointments',id), {status});
@@ -550,6 +565,7 @@ window.submitFeedback = async function(){
   if(!message){ showToast('Please share a few words of feedback.'); return; }
   await addDoc(collection(db,'feedback'), {name, phone, rating, message, createdAt:new Date().toISOString()});
   setView('home'); showToast('Thank you for your feedback!', 'success');
+  sendClinicEmail(`New patient feedback${name?` — ${name}`:''}`, feedbackEmailText({name,phone,rating,message}));
 };
 window.deleteFeedback = async function(id){ await deleteDoc(doc(db,'feedback',id)); await loadFeedback(); render(); };
 window.sendFeedbackWhatsApp = function(id){
@@ -1522,9 +1538,9 @@ function setView(v){ window.setView(v); }
 
 /* ---------- icons ---------- */
 function logoMark(){
-  return `<svg width="28" height="28" viewBox="0 0 30 30" fill="none">
-    <circle cx="15" cy="15" r="14" stroke="var(--accent)" stroke-width="1.5"/>
-    <path d="M4 15 H10 L12.5 8 L17 22 L19.5 15 H26" stroke="var(--primary)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  return `<svg width="28" height="28" viewBox="0 0 64 64" fill="none">
+    <path d="M32 55 C13 42 5 29 5 18.5 C5 10 12 4 20 4 C26 4 30.5 7.5 32 12 C33.5 7.5 38 4 44 4 C52 4 59 10 59 18.5 C59 29 51 42 32 55 Z" stroke="var(--primary)" stroke-width="3" fill="none" stroke-linejoin="round"/>
+    <path d="M9 30 H19 L24 18 L34 42 L39 26 H55" stroke="var(--accent)" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
 function pulseDivider(){
