@@ -415,15 +415,34 @@ const SAMPLE_BLOG_POSTS = [
   { title: "Building Healthy Eating Habits in Growing Children",
     body: "Getting a child to eat well can feel like a daily negotiation — but the habits formed in early childhood often carry into adulthood, making this one of the most valuable investments you can make in your child's long-term health.\n\nA few practical starting points: offer a variety of foods repeatedly, even if they're rejected the first (or fifth) time — familiarity often comes before acceptance. Let your child decide how much to eat from what's offered, rather than insisting on a \"clean plate.\" And model the behavior yourself — children are far more likely to eat vegetables they see you enjoying.\n\nLimit sugary drinks and packaged snacks as everyday staples, saving them for occasional treats instead. Water and milk (in age-appropriate amounts) should be the default drinks at home.\n\nIf you're concerned about your child's growth, appetite, or eating habits, our team can check their growth chart and talk through practical, personalized suggestions — no need to figure it out alone." }
 ];
-window.loadSamplePosts = async function(){
-  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS.length} sample blog posts? This won't remove your existing posts.`)) return;
+const SAMPLE_BLOG_POSTS_ML = [
+  { title: "കുട്ടികളുടെ വാക്സിനേഷൻ ഷെഡ്യൂൾ: രക്ഷിതാക്കൾക്കുള്ള ലളിതമായ വഴികാട്ടി",
+    body: "അഞ്ചാംപനി, വില്ലൻ ചുമ, മഞ്ഞപ്പിത്തം തുടങ്ങിയ ഗുരുതരമായ രോഗങ്ങളിൽ നിന്ന് നിങ്ങളുടെ കുട്ടിയെ സംരക്ഷിക്കാനുള്ള ഏറ്റവും ഫലപ്രദമായ മാർഗ്ഗങ്ങളിലൊന്നാണ് വാക്സിനേഷൻ. എന്നാൽ പല ഡോസുകളും പ്രായങ്ങളും ഓർത്തുവയ്ക്കുക എന്നത് പല രക്ഷിതാക്കൾക്കും ബുദ്ധിമുട്ടായി തോന്നാറുണ്ട്.\n\nഒരു നല്ല കാര്യം എന്തെന്നാൽ - ഇതെല്ലാം നിങ്ങൾ തന്നെ ഓർത്തുവയ്ക്കേണ്ട ആവശ്യമില്ല. ഓരോ വിസിറ്റിലും ഞങ്ങൾ നിങ്ങളുടെ കുട്ടിയുടെ വാക്സിനേഷൻ റെക്കോർഡ് പരിശോധിച്ച് അടുത്തതായി എന്താണ് വേണ്ടതെന്ന് അറിയിക്കും. മിക്ക വാക്സിനുകളും ശിശുപ്രായം മുതൽ ആരംഭിച്ച് സ്കൂൾ പ്രായത്തിന്റെ ആദ്യഘട്ടം വരെ തുടരുന്ന ഒരു പരമ്പരയായാണ് നൽകുന്നത് - അതിനാൽ ഒരു ഡോസ് നഷ്ടപ്പെട്ടാൽ വീണ്ടും തുടക്കം മുതൽ ആരംഭിക്കേണ്ടതില്ല, പകരം ബാക്കിയുള്ളവ പൂർത്തിയാക്കിയാൽ മതി.\n\nചില നിർദ്ദേശങ്ങൾ: കുട്ടിയുടെ വാക്സിനേഷൻ കാർഡിന്റെ ഒരു കോപ്പി (ഫോട്ടോ ആയാലും മതി) സൂക്ഷിക്കുക, മറ്റെന്തെങ്കിലും കാരണത്താൽ വരുന്ന വിസിറ്റുകളിൽ പോലും അത് കൊണ്ടുവരിക, ഓരോ വാക്സിനും എന്തിനെതിരെയാണ് സംരക്ഷണം നൽകുന്നതെന്ന് ചോദിച്ചറിയാൻ മടിക്കരുത്. വാക്സിൻ എടുത്ത ശേഷം ചെറിയ വേദനയോ ഒരു ദിവസത്തെ നേരിയ പനിയോ സാധാരണമാണ്; എന്തെങ്കിലും ആശങ്കയുണ്ടെങ്കിൽ ഞങ്ങളെ ബന്ധപ്പെടുക.\n\nനിങ്ങളുടെ കുട്ടിക്ക് ഏതെങ്കിലും വാക്സിൻ നഷ്ടപ്പെട്ടിട്ടുണ്ടെങ്കിൽ, അത് പൂർത്തിയാക്കാൻ ഒരിക്കലും വൈകിയിട്ടില്ല - ഒരു വിസിറ്റ് ബുക്ക് ചെയ്യൂ, ഞങ്ങൾ സഹായിക്കാം." },
+  { title: "കുട്ടികളിലെ പ്രമേഹം: ദൈനംദിന ജീവിതത്തിൽ സഹായകമാകുന്ന 5 ശീലങ്ങൾ",
+    body: "ഒരു ചെറിയ കുട്ടിക്ക് പ്രമേഹം സ്ഥിരീകരിക്കുന്നത് തുടക്കത്തിൽ ഏതൊരു കുടുംബത്തിനും ഭയപ്പെടുത്തുന്ന അനുഭവമായിരിക്കാം. എന്നാൽ ശരിയായ ദൈനംദിന ശീലങ്ങളിലൂടെ, പ്രമേഹമുള്ള മിക്ക കുട്ടികളും പൂർണ്ണവും സജീവവുമായ ജീവിതം നയിക്കുന്നു.\n\n1. സ്ഥിരമായ നിരീക്ഷണം: പതിവായ ബ്ലഡ് ഷുഗർ പരിശോധനകളും ഇടയ്ക്കിടെയുള്ള HbA1c ടെസ്റ്റുകളും, ഒറ്റപ്പെട്ട നമ്പറുകളല്ല, മറിച്ച് കൃത്യമായ ട്രെൻഡ് മനസ്സിലാക്കാൻ നിങ്ങളെയും ഡോക്ടറെയും സഹായിക്കുന്നു.\n\n2. നിയന്ത്രണമല്ല, സന്തുലിതമായ ഭക്ഷണം: പ്രമേഹമുള്ള കുട്ടികൾക്ക് കുടുംബത്തിലെ മറ്റുള്ളവരിൽ നിന്ന് പൂർണ്ണമായും വ്യത്യസ്തമായ ഭക്ഷണക്രമം ആവശ്യമില്ല - കാർബോഹൈഡ്രേറ്റിന്റെ സമയവും അളവും ശ്രദ്ധിച്ചാൽ മതി, അത് ഡോക്ടറുമായോ ഡയറ്റീഷ്യനുമായോ ചേർന്ന് തീരുമാനിക്കാം.\n\n3. സ്ഥിരമായ ശാരീരിക പ്രവർത്തനം: കളിയും വ്യായാമവും ശരീരത്തിന് ഇൻസുലിൻ കൂടുതൽ ഫലപ്രദമായി ഉപയോഗിക്കാൻ സഹായിക്കുന്നു. പ്രവർത്തന സമയത്ത് ഷുഗർ കുറയാൻ സാധ്യതയുള്ളതിനാൽ വേഗത്തിൽ ഫലിക്കുന്ന ഒരു മധുരപലഹാരം കയ്യിൽ കരുതുക.\n\n4. ലളിതമായ ഒരു പങ്കിട്ട ദിനചര്യ: പ്രായത്തിനനുസരിച്ച് കുട്ടിയെ സ്വന്തം പരിചരണത്തിൽ ഉൾപ്പെടുത്തുന്നത് - ഷുഗർ ലെവൽ പരിശോധിക്കുക, ഭക്ഷണ തിരഞ്ഞെടുപ്പ് മനസ്സിലാക്കുക - വളരുന്തോറും ആത്മവിശ്വാസവും സ്വാതന്ത്ര്യബോധവും വളർത്തുന്നു.\n\n5. ചികിത്സാ സംഘവുമായുള്ള തുറന്ന ആശയവിനിമയം: ഓരോ കുട്ടിയും ചികിത്സയോട് ഒരേപോലെ പ്രതികരിക്കില്ല. കുട്ടി വളരുന്നതിനനുസരിച്ച് പ്ലാൻ ക്രമീകരിക്കാൻ പതിവായ ഫോളോ-അപ്പുകൾ സഹായിക്കും.\n\nനിങ്ങൾ ഒറ്റയ്ക്കല്ല ഇത് കൈകാര്യം ചെയ്യുന്നത് - പതിവ് നിരീക്ഷണത്തിനും മരുന്ന് ക്രമീകരണത്തിനും ഇടയ്ക്കുള്ള ഏത് സംശയത്തിനും ഞങ്ങളുടെ ടീം കൂടെയുണ്ട്." },
+  { title: "കുട്ടികളിലെ പനി: എപ്പോൾ ആശങ്കപ്പെടണം, എപ്പോൾ കാത്തിരിക്കാം",
+    body: "രാത്രി രണ്ട് മണിക്ക് ചൂടും അസ്വസ്ഥതയുമുള്ള ഒരു കുട്ടിയെപ്പോലെ രക്ഷിതാക്കളെ അസ്വസ്ഥരാക്കുന്ന കാര്യങ്ങൾ കുറവാണ് - എന്നാൽ പനി തന്നെ അപൂർവ്വമായി മാത്രമേ അപകടകരമാകാറുള്ളൂ. കുട്ടിയുടെ പ്രതിരോധശേഷി അണുബാധയ്ക്കെതിരെ പോരാടുന്നു എന്നതിന്റെ സാധാരണ സൂചനയാണ് ഇത്.\n\n3 മാസത്തിന് മുകളിൽ പ്രായമുള്ള കുട്ടികളിൽ, മറ്റ് ആശങ്കാജനകമായ ലക്ഷണങ്ങളൊന്നുമില്ലാതെ 102°F (38.9°C)ൽ താഴെയുള്ള പനി പലപ്പോഴും വിശ്രമവും ദ്രാവകങ്ങളും ഇളംവസ്ത്രവും ഉപയോഗിച്ച് വീട്ടിൽ തന്നെ കൈകാര്യം ചെയ്യാം. തെർമോമീറ്ററിലെ നമ്പറിൽ മാത്രം ശ്രദ്ധിക്കാതെ കുട്ടി എങ്ങനെ പെരുമാറുന്നു എന്ന് നിരീക്ഷിക്കുക - പനിക്കിടയിലും കളിക്കുകയും ദ്രാവകങ്ങൾ കുടിക്കുകയും ചെയ്യുന്ന കുട്ടി സാധാരണയായി അടിയന്തരാവസ്ഥയല്ല.\n\n3 മാസത്തിൽ താഴെ പ്രായമുള്ള കുട്ടിക്ക് ഏതെങ്കിലും തരത്തിലുള്ള പനി ഉണ്ടെങ്കിലോ, പനി 104°F (40°C) കടക്കുകയോ, 2-3 ദിവസത്തിലധികം നീണ്ടുനിൽക്കുകയോ, കഴുത്ത് വേദന, ശ്വാസതടസ്സം, അസാധാരണമായ മയക്കം, അമർത്തിയാൽ മാറാത്ത ചുവന്ന പാടുകൾ, ദ്രാവകം കുടിക്കാൻ വിസമ്മതിക്കൽ എന്നിവയോടൊപ്പം പനി വരികയോ ചെയ്താൽ ഉടൻ ഞങ്ങളെ ബന്ധപ്പെടുകയോ ചികിത്സ തേടുകയോ ചെയ്യുക.\n\nസംശയം തോന്നിയാൽ, എപ്പോൾ വേണമെങ്കിലും വിളിക്കുകയോ കുട്ടിയെ കൊണ്ടുവരികയോ ചെയ്യാം - നിങ്ങൾ ഒറ്റയ്ക്ക് ആശങ്കപ്പെടുന്നതിനേക്കാൾ ഞങ്ങൾ നിങ്ങൾക്ക് ധൈര്യം നൽകാൻ ആഗ്രഹിക്കുന്നു." },
+  { title: "HbA1c എന്താണ്? ഈ ലളിതമായ രക്തപരിശോധന നിങ്ങളോട് പറയുന്നത്",
+    body: "നിങ്ങൾക്കോ നിങ്ങളുടെ കുട്ടിക്കോ പ്രമേഹമുണ്ടെങ്കിൽ, മിക്കവാറും എല്ലാ വിസിറ്റിലും ഡോക്ടർ \"HbA1c\" എന്ന് പറയുന്നത് കേട്ടിട്ടുണ്ടാകും - എന്നാൽ ഇത് യഥാർത്ഥത്തിൽ എന്താണ് അളക്കുന്നത്?\n\nഒരു നിമിഷത്തെ അളവ് മാത്രം കാണിക്കുന്ന സാധാരണ ബ്ലഡ് ഷുഗർ പരിശോധനയിൽ നിന്ന് വ്യത്യസ്തമായി, കഴിഞ്ഞ 2-3 മാസത്തെ ശരാശരി ബ്ലഡ് ഷുഗർ നിലയാണ് HbA1c കാണിക്കുന്നത്. ചുവന്ന രക്താണുക്കളിൽ ഓക്സിജൻ വഹിക്കുന്ന പ്രോട്ടീനായ ഹീമോഗ്ലോബിനിൽ എത്ര ശതമാനത്തിൽ ഷുഗർ ഒട്ടിപ്പിടിച്ചിരിക്കുന്നു എന്ന് അളന്നാണ് ഇത് കണ്ടെത്തുന്നത് - ശരാശരി ബ്ലഡ് ഷുഗർ കൂടുതലായിരുന്നാൽ ഈ ശതമാനവും കൂടും.\n\nഒറ്റപ്പെട്ട ഉയർന്നതോ താഴ്ന്നതോ ആയ ഒരു റീഡിംഗിനോട് പ്രതികരിക്കുന്നതിന് പകരം, പ്രമേഹ പരിചരണത്തിന്റെ വലിയ ചിത്രം മനസ്സിലാക്കാൻ ഏറ്റവും ഉപകാരപ്രദമായ ഉപകരണങ്ങളിലൊന്നാണിത്. പ്രായവും ആരോഗ്യ ചരിത്രവും അനുസരിച്ച് ശരിയായ ലക്ഷ്യം വ്യത്യാസപ്പെടാവുന്നതിനാൽ, മിക്കവർക്കും ഡോക്ടർ വ്യക്തിഗതമായി തീരുമാനിക്കുന്ന ഒരു HbA1c ലക്ഷ്യമാണുണ്ടാവുക.\n\nഞങ്ങളുടെ ക്ലിനിക്കിൽ പതിവ് പ്രമേഹ നിരീക്ഷണത്തിന്റെ ഭാഗമായി HbA1c ടെസ്റ്റ് ലഭ്യമാണ് - എത്ര തവണ ഇത് പരിശോധിക്കണം, നിങ്ങളുടെ ഏറ്റവും പുതിയ ഫലം എന്താണ് അർത്ഥമാക്കുന്നത് എന്നിവ ഞങ്ങളോട് ചോദിച്ചറിയൂ." },
+  { title: "വളരുന്ന കുട്ടികൾക്ക് ആരോഗ്യകരമായ ഭക്ഷണശീലങ്ങൾ",
+    body: "കുട്ടിയെ നല്ല രീതിയിൽ ഭക്ഷണം കഴിപ്പിക്കുക എന്നത് ദിവസേനയുള്ള ഒരു വിലപേശൽ പോലെ തോന്നാം - എന്നാൽ കുട്ടിക്കാലത്ത് രൂപപ്പെടുന്ന ശീലങ്ങൾ പലപ്പോഴും മുതിർന്നപ്പോഴും തുടരാറുണ്ട്, അതിനാൽ ഇത് നിങ്ങളുടെ കുട്ടിയുടെ ദീർഘകാല ആരോഗ്യത്തിൽ നടത്താവുന്ന ഏറ്റവും വിലപ്പെട്ട നിക്ഷേപങ്ങളിലൊന്നാണ്.\n\nചില പ്രായോഗിക തുടക്കങ്ങൾ: ആദ്യമോ അഞ്ചാം തവണയോ നിരസിക്കപ്പെട്ടാലും വൈവിധ്യമാർന്ന ഭക്ഷണങ്ങൾ വീണ്ടും വീണ്ടും വാഗ്ദാനം ചെയ്യുക - പരിചയം പലപ്പോഴും സ്വീകാര്യതയ്ക്ക് മുന്നേ വരും. \"പ്ലേറ്റ് മുഴുവൻ കഴിക്കണം\" എന്ന് നിർബന്ധിക്കുന്നതിന് പകരം എത്രത്തോളം കഴിക്കണം എന്ന് കുട്ടിയെ തന്നെ തീരുമാനിക്കാൻ അനുവദിക്കുക. നിങ്ങൾ തന്നെ മാതൃക കാണിക്കുക - നിങ്ങൾ ആസ്വദിച്ച് കഴിക്കുന്ന പച്ചക്കറികൾ കുട്ടികൾ കൂടുതൽ എളുപ്പത്തിൽ കഴിക്കും.\n\nമധുരപാനീയങ്ങളും പാക്കറ്റ് ലഘുഭക്ഷണങ്ങളും ദിവസേനയുള്ള ശീലമാക്കാതെ, അപൂർവ്വമായ ട്രീറ്റുകളായി മാത്രം ഒതുക്കുക. വീട്ടിലെ സ്ഥിരം പാനീയങ്ങൾ വെള്ളവും (പ്രായത്തിനനുസരിച്ച അളവിൽ) പാലും ആയിരിക്കണം.\n\nനിങ്ങളുടെ കുട്ടിയുടെ വളർച്ചയെക്കുറിച്ചോ വിശപ്പിനെക്കുറിച്ചോ ഭക്ഷണശീലങ്ങളെക്കുറിച്ചോ ആശങ്കയുണ്ടെങ്കിൽ, ഞങ്ങളുടെ ടീം കുട്ടിയുടെ ഗ്രോത്ത് ചാർട്ട് പരിശോധിച്ച് പ്രായോഗികവും വ്യക്തിഗതവുമായ നിർദ്ദേശങ്ങൾ നൽകും - ഇത് ഒറ്റയ്ക്ക് കണ്ടെത്തേണ്ട ആവശ്യമില്ല." }
+];
+async function addSampleBlogPosts(list){
   const today = new Date();
-  for(let idx=0; idx<SAMPLE_BLOG_POSTS.length; idx++){
+  for(let idx=0; idx<list.length; idx++){
     const d = new Date(today); d.setDate(d.getDate() - idx*2);
-    await addDoc(collection(db,'blogPosts'), { ...SAMPLE_BLOG_POSTS[idx], date: d.toISOString().slice(0,10) });
+    await addDoc(collection(db,'blogPosts'), { ...list[idx], date: d.toISOString().slice(0,10) });
   }
   await loadBlogPosts();
   showToast('👍 Sample posts added!', 'success'); render();
+}
+window.loadSamplePosts = async function(){
+  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS.length} sample blog posts (English)? This won't remove your existing posts.`)) return;
+  await addSampleBlogPosts(SAMPLE_BLOG_POSTS);
+};
+window.loadSampleMalayalamPosts = async function(){
+  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS_ML.length} sample blog posts (Malayalam)? This won't remove your existing posts.`)) return;
+  await addSampleBlogPosts(SAMPLE_BLOG_POSTS_ML);
 };
 window.updateBlogPost = async function(id,key,val){ await updateDoc(doc(db,'blogPosts',id), {[key]:val}); const p=state.data.blogPosts.find(x=>x.id===id); if(p) p[key]=val; };
 window.removeBlogPost = async function(id){ await deleteDoc(doc(db,'blogPosts',id)); await loadBlogPosts(); render(); };
@@ -2133,9 +2152,10 @@ function viewAdminBlog(){
   return adminShell(`<h2 class="display">Blog Posts</h2>
     <div class="row-actions" style="margin-bottom:16px;">
       <button class="btn btn-primary" onclick="addBlogPost()">+ New post</button>
-      <button class="btn btn-outline" onclick="loadSamplePosts()">✨ Load sample posts</button>
+      <button class="btn btn-outline" onclick="loadSamplePosts()">✨ Load sample posts (English)</button>
+      <button class="btn btn-outline" onclick="loadSampleMalayalamPosts()">✨ Load sample posts (മലയാളം)</button>
     </div>
-    ${rows||`<div class="empty-state"><div class="icon">📝</div>No posts yet — click "+ New post" to write one, or "Load sample posts" for 5 ready-made pediatric/diabetic care articles you can edit.</div>`}`);
+    ${rows||`<div class="empty-state"><div class="icon">📝</div>No posts yet — click "+ New post" to write one, or load 5 ready-made pediatric/diabetic care articles in English or Malayalam, all editable afterward.</div>`}`);
 }
 
 /* ---------- render ---------- */
