@@ -403,6 +403,28 @@ window.addBlogPost = async function(){
   const ref = await addDoc(collection(db,'blogPosts'), {title:'New post title', body:'', date:todayISO()});
   await loadBlogPosts(); render();
 };
+const SAMPLE_BLOG_POSTS = [
+  { title: "Your Child's Vaccination Schedule: A Simple Guide for Parents",
+    body: "Vaccinations are one of the most effective ways to protect your child from serious illnesses like measles, whooping cough, and hepatitis. Yet with so many doses and ages to keep track of, it's easy for parents to feel overwhelmed.\n\nThe good news: you don't have to remember it all yourself. At every visit, we check your child's vaccination record and let you know exactly what's due next. Most vaccines are given in a series — starting in infancy and continuing through the early school years — so missing one dose doesn't mean starting over, it just means catching up.\n\nA few tips: keep a physical or photo copy of your child's vaccination card, bring it to every visit (even for unrelated illnesses), and don't hesitate to ask us to explain what each vaccine protects against. Mild soreness or a low fever for a day afterward is normal; contact us if you notice anything that concerns you.\n\nIf your child has missed one or more scheduled vaccines, it's never too late to catch up — book a visit and we'll help you get back on track." },
+  { title: "5 Everyday Habits That Help Manage Your Child's Diabetes",
+    body: "A diabetes diagnosis can feel overwhelming at first, especially for a family with a young child. But with the right daily habits, most children with diabetes go on to live full, active lives.\n\n1. Consistent monitoring: Regular blood sugar checks (and periodic HbA1c tests) help you and your doctor understand patterns — not just single numbers — so treatment can be fine-tuned over time.\n\n2. Balanced meals, not restriction: Children with diabetes don't need a completely different diet from the rest of the family — just more attention to carbohydrate timing and portion size, worked out together with your doctor or dietitian.\n\n3. Regular physical activity: Play and exercise help the body use insulin more effectively. Just keep a source of fast-acting sugar nearby in case levels dip during activity.\n\n4. A simple, shared routine: Involving your child (age-appropriately) in their own care — checking sugar levels, understanding food choices — builds confidence and independence as they grow.\n\n5. Open communication with your care team: No two children respond to treatment in exactly the same way. Regular follow-ups let us adjust the plan as your child grows, rather than sticking rigidly to what worked last year.\n\nYou're not managing this alone — our team is here for routine monitoring, prescription adjustments, and any questions in between visits." },
+  { title: "Fever in Children: When to Worry and When to Wait",
+    body: "Few things unsettle a parent like a hot, unwell child at 2 a.m. — but fever itself is rarely dangerous. It's usually a sign that your child's immune system is doing exactly what it should: fighting off an infection.\n\nFor most children over 3 months old, a fever below 102°F (38.9°C) that doesn't come with other worrying symptoms can often be managed at home with rest, fluids, and light clothing. Watch how your child is behaving rather than fixating on the number on the thermometer — a child who is playful and drinking fluids between fever spikes is usually not an emergency.\n\nContact us or seek care promptly if your child is under 3 months old with any fever, the fever crosses 104°F (40°C), it lasts more than 2–3 days, or is accompanied by a stiff neck, difficulty breathing, unusual drowsiness, a rash that doesn't fade under pressure, or refusal to drink fluids.\n\nWhen in doubt, it's always fine to call or bring your child in — we would much rather reassure you than have you worry it out alone." },
+  { title: "Understanding HbA1c: What This Simple Blood Test Really Tells You",
+    body: "If you or your child has diabetes, you've probably heard your doctor mention \"HbA1c\" at almost every visit — but what does it actually measure?\n\nUnlike a regular blood sugar check, which shows a single snapshot in time, HbA1c reflects your average blood sugar levels over the past 2–3 months. It works by measuring the percentage of hemoglobin (the protein in red blood cells that carries oxygen) that has sugar attached to it — the higher your average blood sugar has been, the higher this percentage.\n\nThis makes HbA1c one of the most useful tools for understanding the bigger picture of diabetes management, rather than reacting to any single high or low reading. For most people with diabetes, doctors aim for an HbA1c target agreed upon individually, since the right number can vary by age and health history.\n\nWe offer HbA1c testing at the clinic as part of our routine diabetic monitoring — ask us about how often you should be checking it, and what your latest result means for your care plan." },
+  { title: "Building Healthy Eating Habits in Growing Children",
+    body: "Getting a child to eat well can feel like a daily negotiation — but the habits formed in early childhood often carry into adulthood, making this one of the most valuable investments you can make in your child's long-term health.\n\nA few practical starting points: offer a variety of foods repeatedly, even if they're rejected the first (or fifth) time — familiarity often comes before acceptance. Let your child decide how much to eat from what's offered, rather than insisting on a \"clean plate.\" And model the behavior yourself — children are far more likely to eat vegetables they see you enjoying.\n\nLimit sugary drinks and packaged snacks as everyday staples, saving them for occasional treats instead. Water and milk (in age-appropriate amounts) should be the default drinks at home.\n\nIf you're concerned about your child's growth, appetite, or eating habits, our team can check their growth chart and talk through practical, personalized suggestions — no need to figure it out alone." }
+];
+window.loadSamplePosts = async function(){
+  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS.length} sample blog posts? This won't remove your existing posts.`)) return;
+  const today = new Date();
+  for(let idx=0; idx<SAMPLE_BLOG_POSTS.length; idx++){
+    const d = new Date(today); d.setDate(d.getDate() - idx*2);
+    await addDoc(collection(db,'blogPosts'), { ...SAMPLE_BLOG_POSTS[idx], date: d.toISOString().slice(0,10) });
+  }
+  await loadBlogPosts();
+  showToast('👍 Sample posts added!', 'success'); render();
+};
 window.updateBlogPost = async function(id,key,val){ await updateDoc(doc(db,'blogPosts',id), {[key]:val}); const p=state.data.blogPosts.find(x=>x.id===id); if(p) p[key]=val; };
 window.removeBlogPost = async function(id){ await deleteDoc(doc(db,'blogPosts',id)); await loadBlogPosts(); render(); };
 
@@ -2108,7 +2130,12 @@ function viewAdminBlog(){
     <div class="field"><label>Title</label><input type="text" value="${escapeHtml(p.title)}" onchange="updateBlogPost('${p.id}','title',this.value)"></div>
     <div class="field"><label>Body</label><textarea rows="3" onchange="updateBlogPost('${p.id}','body',this.value)">${escapeHtml(p.body)}</textarea></div>
     <button class="btn btn-danger btn-small" onclick="removeBlogPost('${p.id}')">Delete post</button></div>`).join('');
-  return adminShell(`<h2 class="display">Blog Posts</h2><button class="btn btn-primary" style="margin-bottom:16px;" onclick="addBlogPost()">+ New post</button>${rows||`<div class="empty-state"><div class="icon">📝</div>No posts yet.</div>`}`);
+  return adminShell(`<h2 class="display">Blog Posts</h2>
+    <div class="row-actions" style="margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="addBlogPost()">+ New post</button>
+      <button class="btn btn-outline" onclick="loadSamplePosts()">✨ Load sample posts</button>
+    </div>
+    ${rows||`<div class="empty-state"><div class="icon">📝</div>No posts yet — click "+ New post" to write one, or "Load sample posts" for 5 ready-made pediatric/diabetic care articles you can edit.</div>`}`);
 }
 
 /* ---------- render ---------- */
