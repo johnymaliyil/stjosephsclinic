@@ -285,6 +285,8 @@ const DEFAULT_INFO = {
   ],
   services: [
     { name: "Pediatric Consultation", description: "General child health checkups, growth monitoring, and vaccinations." },
+    { name: "Physician Consultation", description: "General physician consultation for adults, including diabetes and other chronic conditions." },
+    { name: "Online Consultation", description: "Video/phone consultation with our doctors for follow-ups and non-emergency concerns, from home." },
     { name: "Diabetic Care & Monitoring", description: "Blood sugar management, diet guidance, and follow-up consultations." },
     { name: "In-house Pharmacy", description: "Prescribed medicines available directly at the clinic." }
   ],
@@ -398,6 +400,7 @@ function visitEmailText(v){
 }
 function appointmentEmailText(a){
   const lines = [`New appointment request`, `Name: ${a.name}`, `Phone: ${a.phone}`];
+  if(a.consultationType) lines.push(`Consultation type: ${a.consultationType}`);
   if(a.date) lines.push(`Preferred date: ${a.date}`);
   if(a.reason) lines.push(`Reason: ${a.reason}`);
   return lines.join('\n');
@@ -563,12 +566,13 @@ async function loadAppointments(){
 window.submitAppointment = async function(){
   const name=document.getElementById('ap-name').value.trim();
   const phone=document.getElementById('ap-phone').value.trim();
+  const consultationType=document.getElementById('ap-type').value;
   const date=document.getElementById('ap-date').value;
   const reason=document.getElementById('ap-reason').value.trim();
   if(!name || !phone){ showToast('Please enter your name and phone number.'); return; }
-  await addDoc(collection(db,'appointments'), {name,phone,date,reason,status:'pending',createdAt:new Date().toISOString()});
+  await addDoc(collection(db,'appointments'), {name,phone,consultationType,date,reason,status:'pending',createdAt:new Date().toISOString()});
   setView('home'); showToast('Appointment request sent. We will contact you to confirm.');
-  sendClinicEmail(`New appointment request — ${name}`, appointmentEmailText({name,phone,date,reason}));
+  sendClinicEmail(`New appointment request — ${name}`, appointmentEmailText({name,phone,consultationType,date,reason}));
 };
 window.updateAppointmentStatus = async function(id,status){
   await updateDoc(doc(db,'appointments',id), {status});
@@ -581,7 +585,7 @@ window.sendAppointmentWhatsApp = function(id){
   if(!a) return;
   if(!a.phone){ showToast('No phone number on file for this request.'); return; }
   const i = state.data.info;
-  const msg = `Hi ${a.name}, this is ${i.clinicName} regarding your appointment request${a.date?` for ${a.date}`:''}.`;
+  const msg = `Hi ${a.name}, this is ${i.clinicName} regarding your ${a.consultationType||'appointment'} request${a.date?` for ${a.date}`:''}.`;
   window.open(waLinkWithText(a.phone, msg), '_blank');
 };
 
@@ -1405,7 +1409,7 @@ window.exportMedicines = function(){
 };
 window.exportAppointments = function(){
   runExport('Appointment requests', 'appointments', null, [
-    {label:'Name', value:'name'}, {label:'Phone', value:'phone'}, {label:'Preferred Date', value:'date'},
+    {label:'Name', value:'name'}, {label:'Phone', value:'phone'}, {label:'Consultation Type', value:'consultationType'}, {label:'Preferred Date', value:'date'},
     {label:'Reason', value:'reason'}, {label:'Status', value:'status'}, {label:'Requested At', value:'createdAt'}
   ], 'appointment-requests');
 };
@@ -1733,6 +1737,13 @@ function viewBook(){
   <div class="card">
     <div class="field"><label>Full name</label><input id="ap-name" type="text"></div>
     <div class="field"><label>Phone number</label><input id="ap-phone" type="text"></div>
+    <div class="field"><label>Consultation type</label>
+      <select id="ap-type">
+        <option value="Pediatric Consultation">Pediatric Consultation</option>
+        <option value="Physician Consultation">Physician Consultation</option>
+        <option value="Online Consultation">Online Consultation</option>
+      </select>
+    </div>
     <div class="field"><label>Preferred date</label><input id="ap-date" type="date"></div>
     <div class="field"><label>Reason for visit</label><textarea id="ap-reason" rows="3"></textarea></div>
     <button class="btn btn-primary" onclick="submitAppointment()">Submit request</button>
@@ -2143,11 +2154,11 @@ function viewAdminInventory(){
 }
 function viewAdminAppointments(){
   const rows=state.data.appointments.map(a=>`<tr>
-    <td>${escapeHtml(a.name)}</td><td class="mono">${escapeHtml(a.phone)}</td><td class="mono">${escapeHtml(a.date)}</td><td>${escapeHtml(a.reason)}</td>
+    <td>${escapeHtml(a.name)}</td><td class="mono">${escapeHtml(a.phone)}</td><td>${escapeHtml(a.consultationType||'—')}</td><td class="mono">${escapeHtml(a.date)}</td><td>${escapeHtml(a.reason)}</td>
     <td><select onchange="updateAppointmentStatus('${a.id}',this.value)">${['pending','confirmed','done','cancelled'].map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="sendAppointmentWhatsApp('${a.id}')">WhatsApp</button><button class="btn btn-danger btn-small" onclick="deleteAppointment('${a.id}')">Delete</button></td></tr>`).join('');
   return adminShell(`<h2 class="display">Appointment Requests</h2>
-    <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
+    <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
 }
 function viewAdminFeedback(){
   const stars = n => '★'.repeat(n) + '☆'.repeat(5-n);
