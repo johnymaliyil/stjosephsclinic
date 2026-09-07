@@ -129,6 +129,7 @@
   .founder-placeholder{width:120px;height:120px;border-radius:50%;background:var(--surface-soft);border:3px solid var(--accent-soft);display:flex;align-items:center;justify-content:center;}
   .wa-float{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:60;text-decoration:none;}
   .wa-float svg{width:28px;height:28px;}
+  .mobile-tabbar{display:none;}
   .app-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);}
   .app-loading-mark{animation:appLoadingPulse 1.7s ease-in-out infinite;}
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
@@ -141,6 +142,14 @@
     .admin-side h2{display:none;}
     .admin-side button{white-space:nowrap;width:auto;}
     .hero h1{font-size:30px;}
+    nav.links button.nav-page-btn{display:none;}
+    footer.site{margin-bottom:64px;}
+    .wa-float{bottom:78px;width:48px;height:48px;}
+    .wa-float svg{width:24px;height:24px;}
+    .mobile-tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:65;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -2px 10px rgba(0,0,0,.06);padding-bottom:env(safe-area-inset-bottom);}
+    .mobile-tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:8px 2px 7px;font-size:10px;font-weight:600;color:var(--text-muted);}
+    .mobile-tabbar button .icon{font-size:19px;line-height:1;}
+    .mobile-tabbar button.active{color:var(--primary-dark);}
   }
 </style>
 </head>
@@ -1609,14 +1618,20 @@ function publicHeader(){
   return `<header class="site"><div class="container nav-row">
     <div class="logo">${logoMark()} ${escapeHtml(state.data.info.clinicName)}</div>
     <nav class="links">
-      ${links.map(([v,l])=>`<button class="${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
+      ${links.map(([v,l])=>`<button class="nav-page-btn ${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
       ${state.showInstallButton?`<button class="btn btn-accent btn-small" style="margin-left:6px;" onclick="installApp()">⬇ Install app</button>`:''}
       <button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">Staff Login</button>
     </nav>
   </div>${state.showIosInstallHint?`<div class="container"><div class="top-alert" style="margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
     <span>Install this app: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</span>
     <button class="btn btn-outline btn-small" onclick="dismissIosInstallHint()">Dismiss</button>
-  </div></div>`:''}</header>${whatsappFloatButton()}`;
+  </div></div>`:''}</header>${whatsappFloatButton()}${mobileTabBar()}`;
+}
+function mobileTabBar(){
+  const tabs=[['home','🏠','Home'],['services','🩺','Services'],['book','📅','Book'],['blog','📰','Blog'],['feedback','💬','Feedback']];
+  return `<nav class="mobile-tabbar">
+    ${tabs.map(([v,icon,l])=>`<button class="${state.view===v?'active':''}" onclick="setView('${v}')"><span class="icon">${icon}</span>${l}</button>`).join('')}
+  </nav>`;
 }
 function publicFooter(){
   const i=state.data.info;
