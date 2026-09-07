@@ -130,6 +130,7 @@
   .wa-float{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:60;text-decoration:none;}
   .wa-float svg{width:28px;height:28px;}
   .mobile-tabbar{display:none;}
+  .admin-topbar-mobile{display:none;}
   .app-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);}
   .app-loading-mark{animation:appLoadingPulse 1.7s ease-in-out infinite;}
   .app-loading-name{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--primary-dark);letter-spacing:.01em;}
@@ -141,7 +142,11 @@
     .admin-side{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));z-index:65;box-shadow:0 -2px 10px rgba(0,0,0,.2);}
     .admin-side h2{display:none;}
     .admin-side button{white-space:nowrap;width:auto;}
-    .admin-main{padding-bottom:76px;}
+    .admin-side button[data-nav="admin-info"], .admin-side button.admin-side-extra{display:none;}
+    .admin-topbar-mobile{display:flex;position:fixed;left:0;right:0;top:0;z-index:66;background:var(--primary-dark);box-shadow:0 2px 10px rgba(0,0,0,.15);}
+    .admin-topbar-mobile button{flex:1;background:none;border:none;color:#E9E4D6;padding:10px 4px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .admin-topbar-mobile button.active{background:rgba(255,255,255,.14);color:#fff;}
+    .admin-main{padding-top:46px;padding-bottom:76px;}
     .hero h1{font-size:30px;}
     nav.links button.nav-page-btn{display:none;}
     footer.site{margin-bottom:64px;}
@@ -1799,11 +1804,16 @@ function adminNavItems(){
 }
 function adminShell(content){
   return `<div class="admin-shell">
+    <div class="admin-topbar-mobile">
+      <button class="${state.view==='admin-info'?'active':''}" onclick="setView('admin-info')">⚙️ Clinic Info</button>
+      <button onclick="setView('home')">🌐 Public site</button>
+      <button onclick="adminLogout()">🚪 Log out</button>
+    </div>
     <div class="admin-side">
       <h2>${escapeHtml(state.data.info.clinicName)}</h2>
-      ${adminNavItems().map(([v,l])=>`<button class="${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
-      <button onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>
-      <button onclick="adminLogout()" style="color:#E2A08C;">Log out</button>
+      ${adminNavItems().map(([v,l])=>`<button class="${state.view===v?'active':''}" data-nav="${v}" onclick="setView('${v}')">${l}</button>`).join('')}
+      <button class="admin-side-extra" onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>
+      <button class="admin-side-extra" onclick="adminLogout()" style="color:#E2A08C;">Log out</button>
     </div>
     <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${content}</div>
   </div>`;
