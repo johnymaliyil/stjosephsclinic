@@ -474,6 +474,18 @@ function listEditor(field, items){
 window.addListItem = function(field){ state.data.info[field].push({name:'New item',description:''}); render(); };
 window.removeListItem = function(field,idx){ state.data.info[field].splice(idx,1); setDoc(infoRef,state.data.info); render(); };
 window.updateListItem = function(field,idx,key,val){ state.data.info[field][idx][key]=val; setDoc(infoRef,state.data.info); };
+window.addConsultationServices = async function(){
+  const toAdd = [
+    { name: "Physician Consultation", description: "General physician consultation for adults, including diabetes and other chronic conditions." },
+    { name: "Online Consultation", description: "Video/phone consultation with our doctors for follow-ups and non-emergency concerns, from home." }
+  ];
+  const existing = new Set(state.data.info.services.map(s=>(s.name||'').trim().toLowerCase()));
+  const missing = toAdd.filter(s=>!existing.has(s.name.toLowerCase()));
+  if(!missing.length){ showToast('Both services are already in your list.'); return; }
+  state.data.info.services.push(...missing);
+  await setDoc(infoRef, state.data.info);
+  showToast(`Added ${missing.map(s=>s.name).join(' and ')}.`, 'success'); render();
+};
 
 /* ---------- blog posts ---------- */
 async function loadBlogPosts(){
@@ -2255,7 +2267,9 @@ function viewAdminInfo(){
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
     <h3>Our Doctors</h3>${doctorEditor(i.doctors||[])}
-    <h3>Clinical services</h3>${listEditor('services', i.services)}
+    <h3>Clinical services</h3>
+    <button class="btn btn-outline btn-small" style="margin-bottom:10px;" onclick="addConsultationServices()">✨ Add Physician &amp; Online Consultation</button>
+    ${listEditor('services', i.services)}
     <h3>Lab tests</h3>${listEditor('labTests', i.labTests)}
   `);
 }
