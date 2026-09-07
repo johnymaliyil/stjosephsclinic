@@ -182,6 +182,7 @@ import {
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBxagSLab2O_0OkiNmb7fdz6kM9MY_YM4E",
@@ -194,6 +195,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 const auth = getAuth(fbApp);
+const fbFunctions = getFunctions(fbApp);
 
 // Backstop for bugs: without this, an unexpected error anywhere (a typo, a missing
 // field on old data, a third-party script failing) aborts silently -- no toast, no
@@ -323,7 +325,9 @@ let state = {
   editingLabRecord:null,
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
   backupExporting:'',
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], info:DEFAULT_INFO }
+  whatsappCampaignsLoading:false, whatsappSending:false,
+  whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
@@ -628,6 +632,49 @@ window.sendFeedbackWhatsApp = function(id){
   if(!f.phone){ showToast('No phone number on file for this feedback.'); return; }
   const i = state.data.info;
   window.open(waLinkWithText(f.phone, `Hi ${f.name||'there'}, thank you for your feedback — ${i.clinicName}.`), '_blank');
+};
+
+/* ---------- whatsapp campaigns (via WhatsApp Business API, no third-party BSP) ---------- */
+async function loadWhatsappCampaigns(){
+  state.whatsappCampaignsLoading = true; render();
+  try{
+    const q = query(collection(db,'whatsappCampaigns'), orderBy('createdAtMillis','desc'), limit(20));
+    const snap = await getDocs(q);
+    state.data.whatsappCampaigns = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    state.data.whatsappCampaigns = [];
+  }
+  state.whatsappCampaignsLoading = false; render();
+}
+window.setWhatsappField = function(key, val){ state.whatsappForm[key] = val; };
+window.setWhatsappAudience = function(val){ state.whatsappForm.audience = val; render(); };
+window.addWhatsappBodyParam = function(){ state.whatsappForm.bodyParams.push(''); render(); };
+window.removeWhatsappBodyParam = function(idx){ state.whatsappForm.bodyParams.splice(idx,1); render(); };
+window.updateWhatsappBodyParam = function(idx, val){ state.whatsappForm.bodyParams[idx] = val; };
+window.sendWhatsappCampaign = async function(){
+  const f = state.whatsappForm;
+  const templateName = (f.templateName||'').trim();
+  if(!templateName){ showToast('Enter the exact name of your Meta-approved message template.'); return; }
+  const bodyParams = f.bodyParams.map(p=>p.trim()).filter(p=>p);
+  const phones = f.audience==='custom'
+    ? f.customPhones.split(/[\n,]/).map(p=>p.trim()).filter(p=>p)
+    : [];
+  if(f.audience==='custom' && !phones.length){ showToast('Paste at least one phone number, or switch to "All patients".'); return; }
+  if(!confirm(f.audience==='custom'
+    ? `Send the "${templateName}" template to ${phones.length} number(s)?`
+    : `Send the "${templateName}" template to every patient with a phone number on file?`)) return;
+  state.whatsappSending = true; render();
+  try{
+    const call = httpsCallable(fbFunctions, 'sendWhatsAppCampaign', { timeout: 300000 });
+    const res = await call({ templateName, templateLanguage: f.templateLanguage||'en_US', bodyParams, audience: f.audience, phones });
+    const d = res.data || {};
+    showToast(`Campaign sent: ${d.successCount||0} delivered, ${d.failCount||0} failed, out of ${d.totalRecipients||0}.`, 'success');
+    state.whatsappForm = { templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' };
+    await loadWhatsappCampaigns();
+  }catch(e){
+    showToast(`Could not send campaign: ${e.message||e}`);
+  }
+  state.whatsappSending = false; render();
 };
 
 /* ---------- patients (paginated + indexed search) ---------- */
@@ -1587,6 +1634,7 @@ window.setView = async function(v){
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
+  if(v==='admin-whatsapp') await loadWhatsappCampaigns();
   render();
 };
 function setView(v){ window.setView(v); }
@@ -1800,7 +1848,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-labtests','Lab Tests'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
-    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -2193,6 +2241,46 @@ function viewAdminFeedback(){
   return adminShell(`<h2 class="display">Feedback</h2>
     <div class="table-wrap">${state.data.feedback.length?`<table><thead><tr><th>Date</th><th>From</th><th>Rating</th><th>Message</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💬</div>No feedback submitted yet.</div>`}</div>`);
 }
+function viewAdminWhatsapp(){
+  const f = state.whatsappForm;
+  const historyRows = state.data.whatsappCampaigns.map(c=>`<tr>
+    <td class="mono" style="white-space:nowrap;">${escapeHtml((c.createdAt||'').slice(0,16).replace('T',' '))}</td>
+    <td>${escapeHtml(c.templateName)}</td>
+    <td>${c.audience==='custom'?'Custom list':'All patients'}</td>
+    <td>${c.totalRecipients||0}</td>
+    <td style="color:var(--success,#2e7d32);">${c.successCount||0}</td>
+    <td style="color:${c.failCount?'var(--danger,#c0392b)':'inherit'};">${c.failCount||0}</td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">WhatsApp Campaigns</h2>
+    <p style="color:var(--text-muted);max-width:640px;">Sends a WhatsApp template message straight through Meta's WhatsApp Business API — no third-party service. The template must already be approved in your Meta Business Manager (WhatsApp Manager &rarr; Message Templates) before it can be sent here.</p>
+    <div class="card" style="max-width:640px;">
+      <div class="form-grid">
+        <div class="field"><label>Template name (exact, as approved in Meta)</label><input type="text" placeholder="e.g. clinic_camp_announcement" value="${escapeHtml(f.templateName)}" onchange="setWhatsappField('templateName',this.value)"></div>
+        <div class="field"><label>Template language code</label><input type="text" placeholder="en_US" value="${escapeHtml(f.templateLanguage)}" onchange="setWhatsappField('templateLanguage',this.value)"></div>
+      </div>
+      <label style="display:block;margin:12px 0 6px;font-weight:600;font-size:14px;">Template body variables (in order, leave empty if the template has none)</label>
+      ${f.bodyParams.map((p,idx)=>`<div style="display:flex;gap:8px;margin-bottom:6px;">
+        <input type="text" placeholder="{{${idx+1}}}" value="${escapeHtml(p)}" onchange="updateWhatsappBodyParam(${idx},this.value)" style="flex:1;">
+        <button class="btn btn-outline btn-small" onclick="removeWhatsappBodyParam(${idx})">Remove</button>
+      </div>`).join('')}
+      <button class="btn btn-outline btn-small" onclick="addWhatsappBodyParam()">+ Add variable</button>
+      <label style="display:block;margin:16px 0 6px;font-weight:600;font-size:14px;">Send to</label>
+      <div class="row-actions" style="margin-bottom:8px;">
+        <label><input type="radio" name="wa-audience" ${f.audience==='all'?'checked':''} onchange="setWhatsappAudience('all')"> All patients with a phone number</label>
+        <label><input type="radio" name="wa-audience" ${f.audience==='custom'?'checked':''} onchange="setWhatsappAudience('custom')"> Paste a phone number list</label>
+      </div>
+      ${f.audience==='custom'?`<div class="field"><textarea rows="4" placeholder="One number per line, e.g. 9048869262 or +919048869262" onchange="setWhatsappField('customPhones',this.value)">${escapeHtml(f.customPhones)}</textarea></div>`:''}
+      <button class="btn btn-primary" style="margin-top:10px;" ${state.whatsappSending?'disabled':''} onclick="sendWhatsappCampaign()">${state.whatsappSending?'Sending…':'Send campaign'}</button>
+    </div>
+    <h3 style="margin-top:26px;">Recent campaigns</h3>
+    <div class="table-wrap">
+      ${state.whatsappCampaignsLoading? loadingSkeleton(3) :
+        historyRows? `<table><thead><tr><th>Sent</th><th>Template</th><th>Audience</th><th>Total</th><th>Delivered</th><th>Failed</th></tr></thead><tbody>${historyRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📣</div>No campaigns sent yet.</div>`}
+    </div>
+  `);
+}
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
   const items = [
@@ -2325,6 +2413,7 @@ function render(){
       case 'admin-blog': html=viewAdminBlog(); break;
       case 'feedback': html=viewFeedback(); break;
       case 'admin-feedback': html=viewAdminFeedback(); break;
+      case 'admin-whatsapp': html=viewAdminWhatsapp(); break;
       default: html=viewHome();
     }
   }
