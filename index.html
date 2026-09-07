@@ -138,9 +138,10 @@
   @media (prefers-reduced-motion:reduce){.app-loading-mark,.skeleton-row,.top-alert,.top-alert-success{animation:none;}.stat-card-link:hover{transform:none;}}
   @media (max-width:720px){
     .admin-shell{flex-direction:column;}
-    .admin-side{width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;}
+    .admin-side{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;display:flex;overflow-x:auto;gap:2px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));z-index:65;box-shadow:0 -2px 10px rgba(0,0,0,.2);}
     .admin-side h2{display:none;}
     .admin-side button{white-space:nowrap;width:auto;}
+    .admin-main{padding-bottom:76px;}
     .hero h1{font-size:30px;}
     nav.links button.nav-page-btn{display:none;}
     footer.site{margin-bottom:64px;}
