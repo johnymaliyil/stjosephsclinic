@@ -315,7 +315,7 @@ let state = {
   patientCount:null, visitCount:null,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -403,7 +403,7 @@ function visitEmailText(v){
   if(vitals) lines.push(`Vitals: ${vitals}`);
   if(v.medicines && v.medicines.length){
     lines.push('', 'Prescribed medicines:');
-    v.medicines.forEach(m=>lines.push(`  - ${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`));
+    v.medicines.forEach(m=>lines.push(`  - ${m.name}${m.quantity?` x${m.quantity}`:''}${m.dosage?` (${m.dosage})`:''}${m.source==='outside'?' [prescribed externally — to order]':''}`));
   }
   return lines.join('\n');
 }
@@ -774,7 +774,7 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
 }
 async function loadLastVitals(patientId){
   try{
@@ -819,9 +819,13 @@ window.selectVisitPatient = async function(id){
   }
 };
 window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
-window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
-window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
-window.updateVisitMedRow = function(idx,key,val){ state.visitForm.meds[idx][key]=val; };
+window.addVisitMedRow = function(){ state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
+window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
+window.updateVisitMedRow = function(idx,key,val){
+  const row = state.visitForm.meds[idx];
+  row[key]=val;
+  if(key==='source'){ row.medicineId=''; row.name=''; row.quantity=''; render(); }
+};
 window.editVisit = function(id){
   const v = state.data.visits.find(x=>x.id===id);
   if(!v) return;
@@ -830,7 +834,7 @@ window.editVisit = function(id){
     patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
-    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity,dosage:m.dosage||''})) : [{medicineId:'',quantity:'',dosage:''}],
+    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({source:m.source||(m.medicineId?'pharmacy':'outside'),medicineId:m.medicineId||'',name:m.name||'',quantity:m.quantity||'',dosage:m.dosage||''})) : [{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}],
     weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null
   };
   render(); window.scrollTo(0,0);
@@ -857,11 +861,14 @@ window.saveVisitForm = async function(){
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
   if(!date){ showToast('Please choose a visit date.'); return; }
-  const medRows = f.meds.filter(m=>m.medicineId && Number(m.quantity)>0);
-  const medicines = medRows.map(m=>{
+  const pharmacyRows = f.meds.filter(m=>(m.source||'pharmacy')==='pharmacy' && m.medicineId && Number(m.quantity)>0);
+  const pharmacyMeds = pharmacyRows.map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
-    return { medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity), dosage:(m.dosage||'').trim() };
+    return { source:'pharmacy', medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity), dosage:(m.dosage||'').trim() };
   });
+  const outsideRows = f.meds.filter(m=>m.source==='outside' && (m.name||'').trim());
+  const outsideMeds = outsideRows.map(m=>({ source:'outside', name:m.name.trim(), quantity:m.quantity?Number(m.quantity):null, dosage:(m.dosage||'').trim() }));
+  const medicines = [...pharmacyMeds, ...outsideMeds];
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
@@ -870,9 +877,9 @@ window.saveVisitForm = async function(){
   };
   const batch = writeBatch(db);
   if(state.editingVisit){
-    const before = state.editingVisit.medicines||[];
+    const before = (state.editingVisit.medicines||[]).filter(m=>m.medicineId);
     const beforeMap = Object.fromEntries(before.map(m=>[m.medicineId, Number(m.quantity)||0]));
-    const afterMap = Object.fromEntries(medicines.map(m=>[m.medicineId, Number(m.quantity)||0]));
+    const afterMap = Object.fromEntries(pharmacyMeds.map(m=>[m.medicineId, Number(m.quantity)||0]));
     const ids = new Set([...Object.keys(beforeMap), ...Object.keys(afterMap)]);
     ids.forEach(id=>{
       const delta = (afterMap[id]||0) - (beforeMap[id]||0);
@@ -883,7 +890,7 @@ window.saveVisitForm = async function(){
     data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
     const ref = doc(collection(db,'visits'));
     batch.set(ref, data);
-    medicines.forEach(m=>{ batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(-m.quantity)}); });
+    pharmacyMeds.forEach(m=>{ batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(-m.quantity)}); });
   }
   try{
     await batch.commit();
@@ -909,7 +916,7 @@ window.sendPrescriptionWhatsApp = function(visitId){
   if(!v) return;
   if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
   const i = state.data.info;
-  const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}`).join('\n');
+  const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}${m.source==='outside'?' (please purchase from an outside pharmacy)':''}`).join('\n');
   const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
@@ -919,7 +926,7 @@ window.printPrescription = function(visitId){
   const i = state.data.info;
   const rxRows = (v.medicines||[]).map((m,idx)=>`
     <div style="margin-bottom:14px;">
-      <div><strong>${idx+1}. ${escapeHtml(m.name)}</strong> <span style="color:#736F64;">— Qty ${escapeHtml(String(m.quantity))}</span></div>
+      <div><strong>${idx+1}. ${escapeHtml(m.name)}</strong> ${m.quantity?`<span style="color:#736F64;">— Qty ${escapeHtml(String(m.quantity))}</span>`:''}${m.source==='outside'?'<span style="color:#736F64;"> (to be purchased outside)</span>':''}</div>
       ${m.dosage?`<div style="color:#262420;margin-left:16px;">${escapeHtml(m.dosage)}</div>`:''}
     </div>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription — ${escapeHtml(v.patientName)}</title>
@@ -998,7 +1005,7 @@ window.setBillVisitSearchField = function(field){
   render();
 };
 function medItemsFromVisit(visit){
-  return (visit.medicines||[]).map(m=>{
+  return (visit.medicines||[]).filter(m=>m.source!=='outside').map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
     return { medicineId:m.medicineId, name:m.name||(med?med.name:''), quantity:m.quantity, unitPrice: med?(med.price||0):0 };
   });
@@ -1451,7 +1458,8 @@ window.exportVisits = function(){
     {label:'Phone', value:'patientPhone'}, {label:'Doctor', value:'doctorName'}, {label:'Reason', value:'reason'},
     {label:'Weight (kg)', value:'weight'}, {label:'Height (cm)', value:'height'}, {label:'BP', value:'bp'},
     {label:'Blood Sugar (mg/dL)', value:'sugarValue'}, {label:'Sugar Type', value:'sugarType'},
-    {label:'Medicines', value:v=>(v.medicines||[]).map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
+    {label:'Medicines', value:v=>(v.medicines||[]).filter(m=>m.source!=='outside').map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
+    {label:'Medicines To Order', value:v=>(v.medicines||[]).filter(m=>m.source==='outside').map(m=>`${m.name}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
     {label:'Billed', value:v=>v.billId?'Yes':'No'}
   ], 'patient-visits');
 };
@@ -1938,18 +1946,30 @@ function viewAdminVisits(){
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  const medRows = f.meds.map((m,idx)=>`
-    <div class="form-grid" style="grid-template-columns:1.6fr .7fr 1.4fr auto;align-items:end;margin-bottom:8px;">
-      <div class="field" style="margin-bottom:0;"><label>Medicine</label>
+  const medRows = f.meds.map((m,idx)=>{
+    const isOutside = m.source==='outside';
+    const medicineField = isOutside
+      ? `<div class="field" style="margin-bottom:0;"><label>Medicine name</label><input type="text" placeholder="e.g. Atorvastatin 20mg" value="${escapeHtml(m.name||'')}" onchange="updateVisitMedRow(${idx},'name',this.value)"></div>`
+      : `<div class="field" style="margin-bottom:0;"><label>Medicine</label>
         <select onchange="updateVisitMedRow(${idx},'medicineId',this.value)">
           <option value="">— Select —</option>
           ${medOptions.map(x=>`<option value="${x.id}" ${m.medicineId===x.id?'selected':''}>${escapeHtml(x.name)} (${escapeHtml(String(x.quantity))} ${escapeHtml(x.unit||'')} in stock)</option>`).join('')}
         </select>
+      </div>`;
+    return `
+    <div class="form-grid" style="grid-template-columns:1.1fr 1.6fr .7fr 1.4fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Source</label>
+        <select onchange="updateVisitMedRow(${idx},'source',this.value)">
+          <option value="pharmacy" ${!isOutside?'selected':''}>From our pharmacy</option>
+          <option value="outside" ${isOutside?'selected':''}>Prescribed externally (to order)</option>
+        </select>
       </div>
+      ${medicineField}
       <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateVisitMedRow(${idx},'quantity',this.value)"></div>
       <div class="field" style="margin-bottom:0;"><label>Dosage / instructions</label><input type="text" placeholder="e.g. 1 tab twice daily × 5 days" value="${escapeHtml(m.dosage||'')}" onchange="updateVisitMedRow(${idx},'dosage',this.value)"></div>
       <button class="btn btn-outline btn-small" onclick="removeVisitMedRow(${idx})">Remove</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const doctorOptions = (state.data.info.doctors||[]).map(d=>`<option value="${escapeHtml(d.name)}" ${f.doctorName===d.name?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
   const showForm = state.editingVisit || state.showVisitForm;
   const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
@@ -1981,7 +2001,7 @@ function viewAdminVisits(){
     <label>Prescribed medicines</label>
     ${medRows}
     <button class="btn btn-outline btn-small" onclick="addVisitMedRow()">+ Add medicine</button>
-    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Prescribing a medicine here deducts that quantity from Medicine Inventory automatically.</p>
+    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">"From our pharmacy" deducts that quantity from Medicine Inventory automatically. "Prescribed externally" just records the medicine name for follow-up/ordering — no stock is deducted.</p>
     <div class="row-actions" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveVisitForm()">${state.editingVisit?'Save changes':'Register visit'}</button>
       <button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>
@@ -1991,7 +2011,7 @@ function viewAdminVisits(){
     <td class="mono">${escapeHtml(v.date)}</td>
     <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.reason||'')}</td>
-    <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
+    <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.source==='outside'?' <span style="color:var(--accent);">(to order)</span>':''}`).join(', ') || '—'}</td>
     <td class="mono" style="font-size:12px;">${escapeHtml(vitalsSummary(v)) || '—'}</td>
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
