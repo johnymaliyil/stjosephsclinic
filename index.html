@@ -96,6 +96,8 @@
   .stat-card-link:hover{box-shadow:0 4px 14px rgba(31,74,66,.12);border-color:var(--primary);transform:translateY(-2px);}
   .stat-card .num{font-family:'Fraunces',serif;font-size:30px;color:var(--primary-dark);}
   .stat-card .label{font-size:12px;color:var(--text-muted);text-transform:uppercase;}
+  .report-amount{cursor:pointer;border-bottom:1px dashed var(--border);padding-bottom:1px;}
+  .report-amount:hover{color:var(--primary);border-bottom-color:var(--primary);}
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;}
@@ -323,7 +325,7 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
-  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
+  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
   backupExporting:'',
   whatsappCampaignsLoading:false, whatsappSending:false,
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
@@ -1356,8 +1358,8 @@ async function loadCollectionsReport(){
   }
   state.reportLoading = false; render();
 }
-window.setReportFrom = function(v){ state.reportFrom=v; loadCollectionsReport(); };
-window.setReportTo = function(v){ state.reportTo=v; loadCollectionsReport(); };
+window.setReportFrom = function(v){ state.reportFrom=v; state.reportDetailFilter=null; loadCollectionsReport(); };
+window.setReportTo = function(v){ state.reportTo=v; state.reportDetailFilter=null; loadCollectionsReport(); };
 window.applyReportPreset = function(preset){
   const today = todayISO();
   if(preset==='today'){ state.reportFrom=today; state.reportTo=today; }
@@ -1366,8 +1368,19 @@ window.applyReportPreset = function(preset){
     const start = new Date(d); start.setDate(d.getDate()-diff);
     state.reportFrom = start.toISOString().slice(0,10); state.reportTo = today;
   }else if(preset==='month'){ state.reportFrom = monthStartISO(); state.reportTo = today; }
+  state.reportDetailFilter = null;
   loadCollectionsReport();
 };
+function filteredReportBills(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportBills.filter(b=>
+    (!f.date || b.date===f.date) &&
+    (!f.method || (f.method==='upi' ? b.paymentMethod==='upi' : b.paymentMethod!=='upi'))
+  ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+window.setReportDetailFilter = function(date, method, label){ state.reportDetailFilter = {date:date||null, method:method||null, label}; render(); };
+window.clearReportDetailFilter = function(){ state.reportDetailFilter = null; render(); };
 function reportTotals(bills){
   let cash=0, upi=0, medTotal=0, extraTotal=0, consultationTotal=0;
   bills.forEach(b=>{
@@ -2178,10 +2191,26 @@ function viewAdminReports(){
   const dayRows = byDay.map(d=>`<tr>
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono">${d.count}</td>
-    <td class="mono">₹${d.cash.toFixed(2)}</td>
-    <td class="mono">₹${d.upi.toFixed(2)}</td>
-    <td class="mono">₹${d.total.toFixed(2)}</td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','cash','Cash bills on ${escapeHtml(d.date)}')">₹${d.cash.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','upi','UPI bills on ${escapeHtml(d.date)}')">₹${d.upi.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">₹${d.total.toFixed(2)}</span></td>
   </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const bills = filteredReportBills();
+    const rows = bills.map(b=>`<tr>
+      <td class="mono">${escapeHtml(b.billNumber||'')}</td>
+      <td class="mono">${escapeHtml(b.date||'')}</td>
+      <td>${escapeHtml(b.patientName||'')}</td>
+      <td>${b.paymentMethod==='upi'?'UPI':'Cash'}</td>
+      <td class="mono">₹${(Number(b.grandTotal)||0).toFixed(2)}</td>
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button></td>
+    </tr>`).join('');
+    return `<h3 style="margin-top:26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${escapeHtml(state.reportDetailFilter.label)} <button class="btn btn-outline btn-small" onclick="clearReportDetailFilter()">Close</button></h3>
+    <div class="table-wrap">
+      ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">🧾</div>No bills match this filter.</div>`}
+    </div>`;
+  })() : '';
   return adminShell(`
     <h2 class="display">Collections</h2>
     <div class="toolbar">
@@ -2197,16 +2226,17 @@ function viewAdminReports(){
       </div>
     </div>
     <div class="stat-row">
-      <div class="stat-card"><div class="num">₹${totals.total.toFixed(2)}</div><div class="label">Total collected</div></div>
-      <div class="stat-card"><div class="num">₹${totals.cash.toFixed(2)}</div><div class="label">Cash</div></div>
-      <div class="stat-card"><div class="num">₹${totals.upi.toFixed(2)}</div><div class="label">UPI</div></div>
-      <div class="stat-card"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All bills')"><div class="num">₹${totals.total.toFixed(2)}</div><div class="label">Total collected</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'cash','Cash bills')"><div class="num">₹${totals.cash.toFixed(2)}</div><div class="label">Cash</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'upi','UPI bills')"><div class="num">₹${totals.upi.toFixed(2)}</div><div class="label">UPI</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All bills')"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
     </div>
     <div class="table-wrap">
       ${state.reportLoading? loadingSkeleton(5) :
         byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
     </div>
+    ${detail}
   `);
 }
 function viewAdminInventory(){
