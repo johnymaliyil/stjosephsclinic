@@ -96,6 +96,8 @@
   .stat-card-link:hover{box-shadow:0 4px 14px rgba(31,74,66,.12);border-color:var(--primary);transform:translateY(-2px);}
   .stat-card .num{font-family:'Fraunces',serif;font-size:30px;color:var(--primary-dark);}
   .stat-card .label{font-size:12px;color:var(--text-muted);text-transform:uppercase;}
+  .report-amount{cursor:pointer;border-bottom:1px dashed var(--border);padding-bottom:1px;}
+  .report-amount:hover{color:var(--primary);border-bottom-color:var(--primary);}
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;}
@@ -315,7 +317,7 @@ let state = {
   patientCount:null, visitCount:null,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:'', medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -323,7 +325,11 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
-  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[],
+  reportTab:'collections',
+  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
+  patientsReportLoading:false, reportPatients:[],
+  visitsReportLoading:false, reportVisitsList:[],
+  labReportLoading:false, reportLabRecords:[],
   backupExporting:'',
   whatsappCampaignsLoading:false, whatsappSending:false,
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
@@ -403,7 +409,7 @@ function visitEmailText(v){
   if(vitals) lines.push(`Vitals: ${vitals}`);
   if(v.medicines && v.medicines.length){
     lines.push('', 'Prescribed medicines:');
-    v.medicines.forEach(m=>lines.push(`  - ${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`));
+    v.medicines.forEach(m=>lines.push(`  - ${m.name}${m.quantity?` x${m.quantity}`:''}${m.dosage?` (${m.dosage})`:''}${m.source==='outside'?' [prescribed externally — to order]':''}`));
   }
   return lines.join('\n');
 }
@@ -774,7 +780,7 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{medicineId:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
 }
 async function loadLastVitals(patientId){
   try{
@@ -819,9 +825,13 @@ window.selectVisitPatient = async function(id){
   }
 };
 window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
-window.addVisitMedRow = function(){ state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
-window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({medicineId:'',quantity:'',dosage:''}); render(); };
-window.updateVisitMedRow = function(idx,key,val){ state.visitForm.meds[idx][key]=val; };
+window.addVisitMedRow = function(){ state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
+window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
+window.updateVisitMedRow = function(idx,key,val){
+  const row = state.visitForm.meds[idx];
+  row[key]=val;
+  if(key==='source'){ row.medicineId=''; row.name=''; row.quantity=''; render(); }
+};
 window.editVisit = function(id){
   const v = state.data.visits.find(x=>x.id===id);
   if(!v) return;
@@ -830,7 +840,7 @@ window.editVisit = function(id){
     patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
-    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({medicineId:m.medicineId,quantity:m.quantity,dosage:m.dosage||''})) : [{medicineId:'',quantity:'',dosage:''}],
+    meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({source:m.source||(m.medicineId?'pharmacy':'outside'),medicineId:m.medicineId||'',name:m.name||'',quantity:m.quantity||'',dosage:m.dosage||''})) : [{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}],
     weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null
   };
   render(); window.scrollTo(0,0);
@@ -857,11 +867,14 @@ window.saveVisitForm = async function(){
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
   if(!date){ showToast('Please choose a visit date.'); return; }
-  const medRows = f.meds.filter(m=>m.medicineId && Number(m.quantity)>0);
-  const medicines = medRows.map(m=>{
+  const pharmacyRows = f.meds.filter(m=>(m.source||'pharmacy')==='pharmacy' && m.medicineId && Number(m.quantity)>0);
+  const pharmacyMeds = pharmacyRows.map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
-    return { medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity), dosage:(m.dosage||'').trim() };
+    return { source:'pharmacy', medicineId:m.medicineId, name:med?med.name:'', unit:med?med.unit:'', quantity:Number(m.quantity), dosage:(m.dosage||'').trim() };
   });
+  const outsideRows = f.meds.filter(m=>m.source==='outside' && (m.name||'').trim());
+  const outsideMeds = outsideRows.map(m=>({ source:'outside', name:m.name.trim(), quantity:m.quantity?Number(m.quantity):null, dosage:(m.dosage||'').trim() }));
+  const medicines = [...pharmacyMeds, ...outsideMeds];
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
@@ -870,9 +883,9 @@ window.saveVisitForm = async function(){
   };
   const batch = writeBatch(db);
   if(state.editingVisit){
-    const before = state.editingVisit.medicines||[];
+    const before = (state.editingVisit.medicines||[]).filter(m=>m.medicineId);
     const beforeMap = Object.fromEntries(before.map(m=>[m.medicineId, Number(m.quantity)||0]));
-    const afterMap = Object.fromEntries(medicines.map(m=>[m.medicineId, Number(m.quantity)||0]));
+    const afterMap = Object.fromEntries(pharmacyMeds.map(m=>[m.medicineId, Number(m.quantity)||0]));
     const ids = new Set([...Object.keys(beforeMap), ...Object.keys(afterMap)]);
     ids.forEach(id=>{
       const delta = (afterMap[id]||0) - (beforeMap[id]||0);
@@ -883,7 +896,7 @@ window.saveVisitForm = async function(){
     data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
     const ref = doc(collection(db,'visits'));
     batch.set(ref, data);
-    medicines.forEach(m=>{ batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(-m.quantity)}); });
+    pharmacyMeds.forEach(m=>{ batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(-m.quantity)}); });
   }
   try{
     await batch.commit();
@@ -909,7 +922,7 @@ window.sendPrescriptionWhatsApp = function(visitId){
   if(!v) return;
   if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
   const i = state.data.info;
-  const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}`).join('\n');
+  const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}${m.source==='outside'?' (please purchase from an outside pharmacy)':''}`).join('\n');
   const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
@@ -919,7 +932,7 @@ window.printPrescription = function(visitId){
   const i = state.data.info;
   const rxRows = (v.medicines||[]).map((m,idx)=>`
     <div style="margin-bottom:14px;">
-      <div><strong>${idx+1}. ${escapeHtml(m.name)}</strong> <span style="color:#736F64;">— Qty ${escapeHtml(String(m.quantity))}</span></div>
+      <div><strong>${idx+1}. ${escapeHtml(m.name)}</strong> ${m.quantity?`<span style="color:#736F64;">— Qty ${escapeHtml(String(m.quantity))}</span>`:''}${m.source==='outside'?'<span style="color:#736F64;"> (to be purchased outside)</span>':''}</div>
       ${m.dosage?`<div style="color:#262420;margin-left:16px;">${escapeHtml(m.dosage)}</div>`:''}
     </div>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription — ${escapeHtml(v.patientName)}</title>
@@ -998,7 +1011,7 @@ window.setBillVisitSearchField = function(field){
   render();
 };
 function medItemsFromVisit(visit){
-  return (visit.medicines||[]).map(m=>{
+  return (visit.medicines||[]).filter(m=>m.source!=='outside').map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
     return { medicineId:m.medicineId, name:m.name||(med?med.name:''), quantity:m.quantity, unitPrice: med?(med.price||0):0 };
   });
@@ -1335,7 +1348,7 @@ window.saveLabRecordForm = async function(){
   showToast('👍 Lab test saved!', 'success'); render();
 };
 
-/* ---------- collections report ---------- */
+/* ---------- reports (collections / patients / visits / inventory / lab tests) ---------- */
 async function loadCollectionsReport(){
   state.reportLoading = true; render();
   try{
@@ -1349,8 +1362,56 @@ async function loadCollectionsReport(){
   }
   state.reportLoading = false; render();
 }
-window.setReportFrom = function(v){ state.reportFrom=v; loadCollectionsReport(); };
-window.setReportTo = function(v){ state.reportTo=v; loadCollectionsReport(); };
+async function loadPatientsReport(){
+  state.patientsReportLoading = true; render();
+  try{
+    const fromMillis = new Date(state.reportFrom+'T00:00:00').getTime();
+    const toMillis = new Date(state.reportTo+'T23:59:59.999').getTime();
+    const q = query(collection(db,'patients'), where('registeredAtMillis','>=',fromMillis), where('registeredAtMillis','<=',toMillis), orderBy('registeredAtMillis'));
+    const snap = await getDocs(q);
+    state.reportPatients = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    console.error('Failed to load patients report', e);
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    state.reportPatients = [];
+  }
+  state.patientsReportLoading = false; render();
+}
+async function loadVisitsReportData(){
+  state.visitsReportLoading = true; render();
+  try{
+    const q = query(collection(db,'visits'), where('date','>=',state.reportFrom), where('date','<=',state.reportTo), orderBy('date'));
+    const snap = await getDocs(q);
+    state.reportVisitsList = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    console.error('Failed to load visits report', e);
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    state.reportVisitsList = [];
+  }
+  state.visitsReportLoading = false; render();
+}
+async function loadLabRecordsReportData(){
+  state.labReportLoading = true; render();
+  try{
+    const q = query(collection(db,'labRecords'), where('date','>=',state.reportFrom), where('date','<=',state.reportTo), orderBy('date'));
+    const snap = await getDocs(q);
+    state.reportLabRecords = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    console.error('Failed to load lab tests report', e);
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    state.reportLabRecords = [];
+  }
+  state.labReportLoading = false; render();
+}
+function reloadCurrentReportTab(){
+  if(state.reportTab==='collections') return loadCollectionsReport();
+  if(state.reportTab==='patients') return loadPatientsReport();
+  if(state.reportTab==='visits' || state.reportTab==='inventory') return loadVisitsReportData();
+  if(state.reportTab==='labtests') return loadLabRecordsReportData();
+}
+window.setReportTab = function(tab){ state.reportTab=tab; state.reportDetailFilter=null; reloadCurrentReportTab(); };
+window.setReportFrom = function(v){ state.reportFrom=v; state.reportDetailFilter=null; reloadCurrentReportTab(); };
+window.setReportTo = function(v){ state.reportTo=v; state.reportDetailFilter=null; reloadCurrentReportTab(); };
 window.applyReportPreset = function(preset){
   const today = todayISO();
   if(preset==='today'){ state.reportFrom=today; state.reportTo=today; }
@@ -1359,8 +1420,19 @@ window.applyReportPreset = function(preset){
     const start = new Date(d); start.setDate(d.getDate()-diff);
     state.reportFrom = start.toISOString().slice(0,10); state.reportTo = today;
   }else if(preset==='month'){ state.reportFrom = monthStartISO(); state.reportTo = today; }
-  loadCollectionsReport();
+  state.reportDetailFilter = null;
+  reloadCurrentReportTab();
 };
+function filteredReportBills(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportBills.filter(b=>
+    (!f.date || b.date===f.date) &&
+    (!f.method || (f.method==='upi' ? b.paymentMethod==='upi' : b.paymentMethod!=='upi'))
+  ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+window.setReportDetailFilter = function(date, method, label){ state.reportDetailFilter = {date:date||null, method:method||null, label}; render(); };
+window.clearReportDetailFilter = function(){ state.reportDetailFilter = null; render(); };
 function reportTotals(bills){
   let cash=0, upi=0, medTotal=0, extraTotal=0, consultationTotal=0;
   bills.forEach(b=>{
@@ -1381,6 +1453,96 @@ function reportByDay(bills){
     const amt = Number(b.grandTotal)||0;
     map[d].total += amt;
     if(b.paymentMethod==='upi') map[d].upi += amt; else map[d].cash += amt;
+  });
+  return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function filteredReportPatients(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportPatients.filter(p=>
+    (!f.date || (p.registeredAt||'').slice(0,10)===f.date) &&
+    (!f.method || (p.gender||'').toLowerCase()===f.method)
+  ).sort((a,b)=>(a.registeredAt||'').localeCompare(b.registeredAt||''));
+}
+function patientsReportTotals(patients){
+  let male=0, female=0, other=0;
+  patients.forEach(p=>{
+    const g = (p.gender||'').toLowerCase();
+    if(g==='male') male++; else if(g==='female') female++; else other++;
+  });
+  return { count:patients.length, male, female, other };
+}
+function patientsReportByDay(patients){
+  const map = {};
+  patients.forEach(p=>{
+    const d = (p.registeredAt||'').slice(0,10) || '—';
+    if(!map[d]) map[d] = {date:d, count:0};
+    map[d].count++;
+  });
+  return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function filteredReportVisits(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportVisitsList.filter(v=>
+    (!f.date || v.date===f.date) &&
+    (!f.method || (f.method==='billed' ? !!v.billId : !v.billId))
+  ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function visitsReportTotals(visits){
+  let billed=0, unbilled=0;
+  visits.forEach(v=>{ if(v.billId) billed++; else unbilled++; });
+  return { count:visits.length, billed, unbilled };
+}
+function visitsReportByDay(visits){
+  const map = {};
+  visits.forEach(v=>{
+    const d = v.date||'—';
+    if(!map[d]) map[d] = {date:d, count:0, billed:0};
+    map[d].count++;
+    if(v.billId) map[d].billed++;
+  });
+  return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function inventoryReportAggregates(visits){
+  const dispensed = {};
+  const toOrder = {};
+  visits.forEach(v=>{
+    (v.medicines||[]).forEach(m=>{
+      const key = (m.name||'').trim().toLowerCase();
+      if(!key) return;
+      if(m.source==='outside'){
+        if(!toOrder[key]) toOrder[key] = {name:m.name, count:0};
+        toOrder[key].count++;
+      }else{
+        if(!dispensed[key]) dispensed[key] = {name:m.name, qty:0, visits:0};
+        dispensed[key].qty += Number(m.quantity)||0;
+        dispensed[key].visits++;
+      }
+    });
+  });
+  return {
+    dispensed: Object.values(dispensed).sort((a,b)=>b.qty-a.qty),
+    toOrder: Object.values(toOrder).sort((a,b)=>b.count-a.count)
+  };
+}
+function filteredReportLabRecords(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportLabRecords.filter(r=>!f.date || r.date===f.date).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function labReportTotals(records){
+  let amount=0;
+  records.forEach(r=>{ amount += Number(r.amount)||0; });
+  return { count:records.length, amount };
+}
+function labReportByDay(records){
+  const map = {};
+  records.forEach(r=>{
+    const d = r.date||'—';
+    if(!map[d]) map[d] = {date:d, count:0, amount:0};
+    map[d].count++;
+    map[d].amount += Number(r.amount)||0;
   });
   return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
 }
@@ -1451,7 +1613,8 @@ window.exportVisits = function(){
     {label:'Phone', value:'patientPhone'}, {label:'Doctor', value:'doctorName'}, {label:'Reason', value:'reason'},
     {label:'Weight (kg)', value:'weight'}, {label:'Height (cm)', value:'height'}, {label:'BP', value:'bp'},
     {label:'Blood Sugar (mg/dL)', value:'sugarValue'}, {label:'Sugar Type', value:'sugarType'},
-    {label:'Medicines', value:v=>(v.medicines||[]).map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
+    {label:'Medicines', value:v=>(v.medicines||[]).filter(m=>m.source!=='outside').map(m=>`${m.name} x${m.quantity}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
+    {label:'Medicines To Order', value:v=>(v.medicines||[]).filter(m=>m.source==='outside').map(m=>`${m.name}${m.dosage?` (${m.dosage})`:''}`).join('; ')},
     {label:'Billed', value:v=>v.billId?'Yes':'No'}
   ], 'patient-visits');
 };
@@ -1630,7 +1793,7 @@ window.setView = async function(v){
     await Promise.all([loadBillsPage(true), loadMedicines()]);
     if(state.billingPrefillVisit){ selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
   }
-  if(v==='admin-reports') await loadCollectionsReport();
+  if(v==='admin-reports') await reloadCurrentReportTab();
   if(v==='admin-inventory') await loadMedicines();
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
@@ -1847,7 +2010,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-labtests','Lab Tests'],['admin-billing','Billing'],['admin-reports','Collections'],['admin-inventory','Medicine Inventory'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-labtests','Lab Tests'],['admin-billing','Billing'],['admin-reports','Reports'],['admin-inventory','Medicine Inventory'],
     ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -1938,18 +2101,30 @@ function viewAdminVisits(){
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  const medRows = f.meds.map((m,idx)=>`
-    <div class="form-grid" style="grid-template-columns:1.6fr .7fr 1.4fr auto;align-items:end;margin-bottom:8px;">
-      <div class="field" style="margin-bottom:0;"><label>Medicine</label>
+  const medRows = f.meds.map((m,idx)=>{
+    const isOutside = m.source==='outside';
+    const medicineField = isOutside
+      ? `<div class="field" style="margin-bottom:0;"><label>Medicine name</label><input type="text" placeholder="e.g. Atorvastatin 20mg" value="${escapeHtml(m.name||'')}" onchange="updateVisitMedRow(${idx},'name',this.value)"></div>`
+      : `<div class="field" style="margin-bottom:0;"><label>Medicine</label>
         <select onchange="updateVisitMedRow(${idx},'medicineId',this.value)">
           <option value="">— Select —</option>
           ${medOptions.map(x=>`<option value="${x.id}" ${m.medicineId===x.id?'selected':''}>${escapeHtml(x.name)} (${escapeHtml(String(x.quantity))} ${escapeHtml(x.unit||'')} in stock)</option>`).join('')}
         </select>
+      </div>`;
+    return `
+    <div class="form-grid" style="grid-template-columns:1.1fr 1.6fr .7fr 1.4fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Source</label>
+        <select onchange="updateVisitMedRow(${idx},'source',this.value)">
+          <option value="pharmacy" ${!isOutside?'selected':''}>From our pharmacy</option>
+          <option value="outside" ${isOutside?'selected':''}>Prescribed externally (to order)</option>
+        </select>
       </div>
+      ${medicineField}
       <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(m.quantity)}" onchange="updateVisitMedRow(${idx},'quantity',this.value)"></div>
       <div class="field" style="margin-bottom:0;"><label>Dosage / instructions</label><input type="text" placeholder="e.g. 1 tab twice daily × 5 days" value="${escapeHtml(m.dosage||'')}" onchange="updateVisitMedRow(${idx},'dosage',this.value)"></div>
       <button class="btn btn-outline btn-small" onclick="removeVisitMedRow(${idx})">Remove</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const doctorOptions = (state.data.info.doctors||[]).map(d=>`<option value="${escapeHtml(d.name)}" ${f.doctorName===d.name?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
   const showForm = state.editingVisit || state.showVisitForm;
   const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
@@ -1981,7 +2156,7 @@ function viewAdminVisits(){
     <label>Prescribed medicines</label>
     ${medRows}
     <button class="btn btn-outline btn-small" onclick="addVisitMedRow()">+ Add medicine</button>
-    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Prescribing a medicine here deducts that quantity from Medicine Inventory automatically.</p>
+    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">"From our pharmacy" deducts that quantity from Medicine Inventory automatically. "Prescribed externally" just records the medicine name for follow-up/ordering — no stock is deducted.</p>
     <div class="row-actions" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveVisitForm()">${state.editingVisit?'Save changes':'Register visit'}</button>
       <button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>
@@ -1991,7 +2166,7 @@ function viewAdminVisits(){
     <td class="mono">${escapeHtml(v.date)}</td>
     <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.reason||'')}</td>
-    <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)} × ${escapeHtml(String(m.quantity))}`).join(', ') || '—'}</td>
+    <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.source==='outside'?' <span style="color:var(--accent);">(to order)</span>':''}`).join(', ') || '—'}</td>
     <td class="mono" style="font-size:12px;">${escapeHtml(vitalsSummary(v)) || '—'}</td>
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
@@ -2152,18 +2327,193 @@ function viewAdminBilling(){
     ${(!state.billsLoading && state.hasMoreBills) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreBills()">Load 50 more</button></div>` : ''}
   `);
 }
-function viewAdminReports(){
+function reportDetailHeader(label){
+  return `<h3 style="margin-top:26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${escapeHtml(label)} <button class="btn btn-outline btn-small" onclick="clearReportDetailFilter()">Close</button></h3>`;
+}
+function reportTabCollections(){
   const totals = reportTotals(state.reportBills);
   const byDay = reportByDay(state.reportBills);
   const dayRows = byDay.map(d=>`<tr>
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono">${d.count}</td>
-    <td class="mono">₹${d.cash.toFixed(2)}</td>
-    <td class="mono">₹${d.upi.toFixed(2)}</td>
-    <td class="mono">₹${d.total.toFixed(2)}</td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','cash','Cash bills on ${escapeHtml(d.date)}')">₹${d.cash.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','upi','UPI bills on ${escapeHtml(d.date)}')">₹${d.upi.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">₹${d.total.toFixed(2)}</span></td>
   </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const bills = filteredReportBills();
+    const rows = bills.map(b=>`<tr>
+      <td class="mono">${escapeHtml(b.billNumber||'')}</td>
+      <td class="mono">${escapeHtml(b.date||'')}</td>
+      <td>${escapeHtml(b.patientName||'')}</td>
+      <td>${b.paymentMethod==='upi'?'UPI':'Cash'}</td>
+      <td class="mono">₹${(Number(b.grandTotal)||0).toFixed(2)}</td>
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button></td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">🧾</div>No bills match this filter.</div>`}
+    </div>`;
+  })() : '';
+  return `
+    <div class="stat-row">
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All bills')"><div class="num">₹${totals.total.toFixed(2)}</div><div class="label">Total collected</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'cash','Cash bills')"><div class="num">₹${totals.cash.toFixed(2)}</div><div class="label">Cash</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'upi','UPI bills')"><div class="num">₹${totals.upi.toFixed(2)}</div><div class="label">UPI</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All bills')"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.reportLoading? loadingSkeleton(5) :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
+    </div>
+    ${detail}`;
+}
+function reportTabPatients(){
+  const totals = patientsReportTotals(state.reportPatients);
+  const byDay = patientsReportByDay(state.reportPatients);
+  const dayRows = byDay.map(d=>`<tr>
+    <td class="mono">${escapeHtml(d.date)}</td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Patients registered on ${escapeHtml(d.date)}')">${d.count}</span></td>
+  </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const patients = filteredReportPatients();
+    const rows = patients.map(p=>`<tr>
+      <td class="mono">${escapeHtml(p.opdNo||'')}</td>
+      <td>${escapeHtml(p.name||'')}</td>
+      <td class="mono">${escapeHtml(p.phone||'')}</td>
+      <td>${escapeHtml(p.gender||'')}</td>
+      <td class="mono">${escapeHtml(p.age||'')}</td>
+      <td class="mono">${escapeHtml((p.registeredAt||'').slice(0,10))}</td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">🗂️</div>No patients match this filter.</div>`}
+    </div>`;
+  })() : '';
+  return `
+    <div class="stat-row">
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'New patients')"><div class="num">${totals.count}</div><div class="label">New patients</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'male','Male patients')"><div class="num">${totals.male}</div><div class="label">Male</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'female','Female patients')"><div class="num">${totals.female}</div><div class="label">Female</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.patientsReportLoading? loadingSkeleton(5) :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>New patients</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No new patients in this date range.</div>`}
+    </div>
+    ${detail}`;
+}
+function reportTabVisits(){
+  const totals = visitsReportTotals(state.reportVisitsList);
+  const byDay = visitsReportByDay(state.reportVisitsList);
+  const dayRows = byDay.map(d=>`<tr>
+    <td class="mono">${escapeHtml(d.date)}</td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">${d.count}</span></td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','billed','Billed visits on ${escapeHtml(d.date)}')">${d.billed}</span></td>
+  </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const visits = filteredReportVisits();
+    const rows = visits.map(v=>`<tr>
+      <td class="mono">${escapeHtml(v.date||'')}</td>
+      <td>${escapeHtml(v.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
+      <td>${escapeHtml(v.reason||'')}</td>
+      <td>${escapeHtml(v.doctorName||'')}</td>
+      <td>${v.billId?'Yes':'No'}</td>
+      <td class="row-actions">${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button>`:''}${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">Bill</button>`:''}</td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${visits.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Doctor</th><th>Billed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">🩺</div>No visits match this filter.</div>`}
+    </div>`;
+  })() : '';
+  return `
+    <div class="stat-row">
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All visits')"><div class="num">${totals.count}</div><div class="label">Total visits</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'billed','Billed visits')"><div class="num">${totals.billed}</div><div class="label">Billed</div></div>
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'unbilled','Not yet billed')"><div class="num">${totals.unbilled}</div><div class="label">Not yet billed</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.visitsReportLoading? loadingSkeleton(5) :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>Visits</th><th>Billed</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No visits in this date range.</div>`}
+    </div>
+    ${detail}`;
+}
+function reportTabInventory(){
+  const agg = inventoryReportAggregates(state.reportVisitsList);
+  const dispensedRows = agg.dispensed.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.qty}</td><td class="mono">${m.visits}</td></tr>`).join('');
+  const toOrderRows = agg.toOrder.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.count}</td></tr>`).join('');
+  const totalUnits = agg.dispensed.reduce((s,m)=>s+m.qty,0);
+  return `
+    <div class="stat-row">
+      <div class="stat-card"><div class="num">${totalUnits}</div><div class="label">Units dispensed</div></div>
+      <div class="stat-card"><div class="num">${agg.dispensed.length}</div><div class="label">Distinct medicines dispensed</div></div>
+      <div class="stat-card"><div class="num">${agg.toOrder.length}</div><div class="label">Distinct medicines to order</div></div>
+    </div>
+    <h3 style="margin-top:0;">Top dispensed medicines</h3>
+    <div class="table-wrap">
+      ${state.visitsReportLoading? loadingSkeleton(5) :
+        dispensedRows ? `<table><thead><tr><th>Medicine</th><th>Qty dispensed</th><th>Visits</th></tr></thead><tbody>${dispensedRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">💊</div>No medicines dispensed in this date range.</div>`}
+    </div>
+    <h3>Medicines to order</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Prescribed externally (not from our pharmacy) during this date range — see Patient Visits for details.</p>
+    <div class="table-wrap">
+      ${state.visitsReportLoading? loadingSkeleton(3) :
+        toOrderRows ? `<table><thead><tr><th>Medicine</th><th>Times requested</th></tr></thead><tbody>${toOrderRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">✅</div>Nothing prescribed externally in this date range.</div>`}
+    </div>`;
+}
+function reportTabLabTests(){
+  const totals = labReportTotals(state.reportLabRecords);
+  const byDay = labReportByDay(state.reportLabRecords);
+  const dayRows = byDay.map(d=>`<tr>
+    <td class="mono">${escapeHtml(d.date)}</td>
+    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Lab tests on ${escapeHtml(d.date)}')">${d.count}</span></td>
+    <td class="mono">₹${d.amount.toFixed(2)}</td>
+  </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const records = filteredReportLabRecords();
+    const rows = records.map(r=>`<tr>
+      <td class="mono">${escapeHtml(r.date||'')}</td>
+      <td>${escapeHtml(r.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
+      <td>${escapeHtml(r.details||'')}</td>
+      <td class="mono">₹${(Number(r.amount)||0).toFixed(2)}</td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${records.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Details</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">🧪</div>No lab tests match this filter.</div>`}
+    </div>`;
+  })() : '';
+  return `
+    <div class="stat-row">
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All lab tests')"><div class="num">${totals.count}</div><div class="label">Lab tests</div></div>
+      <div class="stat-card"><div class="num">₹${totals.amount.toFixed(2)}</div><div class="label">Total amount</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.labReportLoading? loadingSkeleton(5) :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>Tests</th><th>Amount</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No lab tests in this date range.</div>`}
+    </div>
+    ${detail}`;
+}
+function viewAdminReports(){
+  const tabs = [['collections','Collections'],['patients','Patients'],['visits','Visits'],['inventory','Inventory'],['labtests','Lab Tests']];
+  const tabNav = `<div class="row-actions" style="margin-bottom:16px;">${tabs.map(([k,l])=>`<button class="btn ${state.reportTab===k?'btn-primary':'btn-outline'} btn-small" onclick="setReportTab('${k}')">${l}</button>`).join('')}</div>`;
+  let body = '';
+  if(state.reportTab==='patients') body = reportTabPatients();
+  else if(state.reportTab==='visits') body = reportTabVisits();
+  else if(state.reportTab==='inventory') body = reportTabInventory();
+  else if(state.reportTab==='labtests') body = reportTabLabTests();
+  else body = reportTabCollections();
   return adminShell(`
-    <h2 class="display">Collections</h2>
+    <h2 class="display">Reports</h2>
+    ${tabNav}
     <div class="toolbar">
       <div class="row-actions">
         <button class="btn btn-outline btn-small" onclick="applyReportPreset('today')">Today</button>
@@ -2176,17 +2526,7 @@ function viewAdminReports(){
         <input type="date" value="${escapeHtml(state.reportTo)}" onchange="setReportTo(this.value)">
       </div>
     </div>
-    <div class="stat-row">
-      <div class="stat-card"><div class="num">₹${totals.total.toFixed(2)}</div><div class="label">Total collected</div></div>
-      <div class="stat-card"><div class="num">₹${totals.cash.toFixed(2)}</div><div class="label">Cash</div></div>
-      <div class="stat-card"><div class="num">₹${totals.upi.toFixed(2)}</div><div class="label">UPI</div></div>
-      <div class="stat-card"><div class="num">${totals.count}</div><div class="label">Bills</div></div>
-    </div>
-    <div class="table-wrap">
-      ${state.reportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
-        : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
-    </div>
+    ${body}
   `);
 }
 function viewAdminInventory(){
