@@ -55,6 +55,9 @@
   nav.links button{background:none;border:none;padding:8px 12px;border-radius:6px;font-size:14px;font-weight:500;color:var(--text-muted);transition:background .15s ease,color .15s ease;}
   nav.links button:hover{background:var(--surface-soft);color:var(--primary-dark);}
   nav.links button.active{color:var(--primary-dark);background:var(--surface-soft);font-weight:600;}
+  .lang-toggle{display:flex;gap:2px;background:var(--surface-soft);border-radius:20px;padding:2px;margin-left:4px;}
+  .lang-toggle button{padding:5px 10px;border-radius:18px;font-size:12px;font-weight:600;background:none;border:none;color:var(--text-muted);}
+  .lang-toggle button.active{background:var(--primary);color:#fff;}
   .pulse-divider{width:100%;height:36px;display:block;}
   .hero{padding-top:64px;padding-bottom:40px;}
   .legacy-badge{display:inline-block;background:var(--accent-soft);border:1px solid var(--accent);color:var(--primary-dark);font-weight:600;font-size:13px;letter-spacing:.01em;padding:7px 16px;border-radius:999px;margin-bottom:18px;}
@@ -408,6 +411,68 @@ window.sendChatMessage = function(){
   render(); scrollChatToBottom();
 };
 
+/* ---------- i18n (public site navigation/labels only; admin-entered content stays as typed) ---------- */
+const TRANSLATIONS = {
+  en: {
+    nav_home:'Home', nav_about:'About', nav_services:'Services & Lab', nav_blog:'Blog', nav_book:'Book Appointment', nav_feedback:'Feedback',
+    nav_staff_login:'Staff Login', nav_install_app:'⬇ Install app',
+    home_lead:'Register for an OPD visit, check our services and lab tests, or request an appointment online.',
+    home_cta:'Request an appointment',
+    label_address:'Address', label_phone:'Phone', label_hours:'Hours',
+    home_doctors_heading:'Our Doctors', home_blog_heading:'Recent from our blog',
+    about_welcome_heading:'Welcome', about_us_heading:'About us', about_find_us_heading:'Find us',
+    about_map_note:'Illustrative map — not to scale.',
+    services_heading:'Clinical services', services_empty:'Services will appear here once added by clinic staff.',
+    labtests_heading:'Lab tests', labtests_empty:'Lab tests will appear here once added by clinic staff.',
+    blog_heading:'Clinic blog', blog_empty:'No posts yet.',
+    book_heading:'Request an appointment', book_intro:'Fill this in and our staff will contact you to confirm.',
+    label_full_name:'Full name', label_phone_number:'Phone number', label_consultation_type:'Consultation type',
+    consult_pediatric:'Pediatric Consultation', consult_physician:'Physician Consultation', consult_online:'Online Consultation',
+    label_preferred_date:'Preferred date', label_reason:'Reason for visit', btn_submit_request:'Submit request',
+    feedback_heading:'Share your feedback', feedback_intro:"We'd love to hear about your experience at the clinic — it helps us do better.",
+    label_your_name_optional:'Your name (optional)', label_phone_optional:'Phone (optional)', label_rating:'Rating',
+    rating_5:'★★★★★ Excellent', rating_4:'★★★★ Good', rating_3:'★★★ Average', rating_2:'★★ Below average', rating_1:'★ Poor',
+    label_your_feedback:'Your feedback', feedback_placeholder:'Tell us what went well, or what we could do better…',
+    btn_submit_feedback:'Submit feedback',
+    footer_rights:'All rights reserved.',
+    doctors_empty:'Doctor details will appear here once added by clinic staff.',
+    btn_whatsapp:'WhatsApp', btn_email:'Email',
+    tab_home:'Home', tab_services:'Services', tab_book:'Book', tab_blog:'Blog', tab_feedback:'Feedback'
+  },
+  ml: {
+    nav_home:'ഹോം', nav_about:'ഞങ്ങളെക്കുറിച്ച്', nav_services:'സേവനങ്ങൾ & ലാബ്', nav_blog:'ബ്ലോഗ്', nav_book:'അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യുക', nav_feedback:'അഭിപ്രായം',
+    nav_staff_login:'സ്റ്റാഫ് ലോഗിൻ', nav_install_app:'⬇ ആപ്പ് ഇൻസ്റ്റാൾ ചെയ്യുക',
+    home_lead:'OPD സന്ദർശനത്തിന് രജിസ്റ്റർ ചെയ്യുക, ഞങ്ങളുടെ സേവനങ്ങളും ലാബ് ടെസ്റ്റുകളും പരിശോധിക്കുക, അല്ലെങ്കിൽ ഓൺലൈനായി അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക.',
+    home_cta:'അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക',
+    label_address:'വിലാസം', label_phone:'ഫോൺ', label_hours:'സമയം',
+    home_doctors_heading:'ഞങ്ങളുടെ ഡോക്ടർമാർ', home_blog_heading:'ബ്ലോഗിൽ നിന്നുള്ള പുതിയവ',
+    about_welcome_heading:'സ്വാഗതം', about_us_heading:'ഞങ്ങളെക്കുറിച്ച്', about_find_us_heading:'ഞങ്ങളെ കണ്ടെത്തുക',
+    about_map_note:'ഇത് ഒരു ദൃഷ്ടാന്ത ഭൂപടം മാത്രമാണ് — സ്കെയിലിൽ അല്ല.',
+    services_heading:'ക്ലിനിക്കൽ സേവനങ്ങൾ', services_empty:'ക്ലിനിക് സ്റ്റാഫ് ചേർത്തുകഴിഞ്ഞാൽ സേവനങ്ങൾ ഇവിടെ കാണാം.',
+    labtests_heading:'ലാബ് ടെസ്റ്റുകൾ', labtests_empty:'ക്ലിനിക് സ്റ്റാഫ് ചേർത്തുകഴിഞ്ഞാൽ ലാബ് ടെസ്റ്റുകൾ ഇവിടെ കാണാം.',
+    blog_heading:'ക്ലിനിക് ബ്ലോഗ്', blog_empty:'ഇതുവരെ പോസ്റ്റുകളൊന്നുമില്ല.',
+    book_heading:'അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക', book_intro:'ഇത് പൂരിപ്പിക്കുക, സ്ഥിരീകരിക്കാൻ ഞങ്ങളുടെ സ്റ്റാഫ് നിങ്ങളെ ബന്ധപ്പെടും.',
+    label_full_name:'പൂർണ്ണ നാമം', label_phone_number:'ഫോൺ നമ്പർ', label_consultation_type:'കൺസൾട്ടേഷൻ തരം',
+    consult_pediatric:'ശിശുരോഗ കൺസൾട്ടേഷൻ', consult_physician:'ഫിസിഷ്യൻ കൺസൾട്ടേഷൻ', consult_online:'ഓൺലൈൻ കൺസൾട്ടേഷൻ',
+    label_preferred_date:'ഇഷ്ടപ്പെട്ട തീയതി', label_reason:'സന്ദർശനത്തിന്റെ കാരണം', btn_submit_request:'അഭ്യർത്ഥന സമർപ്പിക്കുക',
+    feedback_heading:'നിങ്ങളുടെ അഭിപ്രായം പങ്കിടുക', feedback_intro:'ക്ലിനിക്കിലെ നിങ്ങളുടെ അനുഭവത്തെക്കുറിച്ച് അറിയാൻ ഞങ്ങൾ ആഗ്രഹിക്കുന്നു — ഇത് മെച്ചപ്പെടാൻ ഞങ്ങളെ സഹായിക്കുന്നു.',
+    label_your_name_optional:'നിങ്ങളുടെ പേര് (ഐച്ഛികം)', label_phone_optional:'ഫോൺ (ഐച്ഛികം)', label_rating:'റേറ്റിംഗ്',
+    rating_5:'★★★★★ മികച്ചത്', rating_4:'★★★★ നല്ലത്', rating_3:'★★★ ശരാശരി', rating_2:'★★ ശരാശരിയിൽ താഴെ', rating_1:'★ മോശം',
+    label_your_feedback:'നിങ്ങളുടെ അഭിപ്രായം', feedback_placeholder:'എന്താണ് നന്നായി തോന്നിയത്, അല്ലെങ്കിൽ ഞങ്ങൾക്ക് എന്ത് മെച്ചപ്പെടുത്താം എന്ന് പറയുക…',
+    btn_submit_feedback:'അഭിപ്രായം സമർപ്പിക്കുക',
+    footer_rights:'എല്ലാ അവകാശങ്ങളും സംരക്ഷിതം.',
+    doctors_empty:'ക്ലിനിക് സ്റ്റാഫ് ചേർത്തുകഴിഞ്ഞാൽ ഡോക്ടർ വിവരങ്ങൾ ഇവിടെ കാണാം.',
+    btn_whatsapp:'വാട്സ്ആപ്പ്', btn_email:'ഇമെയിൽ',
+    tab_home:'ഹോം', tab_services:'സേവനങ്ങൾ', tab_book:'ബുക്ക്', tab_blog:'ബ്ലോഗ്', tab_feedback:'അഭിപ്രായം'
+  }
+};
+function t(key){ return (TRANSLATIONS[state.lang] && TRANSLATIONS[state.lang][key]) || TRANSLATIONS.en[key] || key; }
+window.setLang = function(lang){
+  state.lang = (lang==='ml') ? 'ml' : 'en';
+  try{ localStorage.setItem('stjosephs_lang', state.lang); }catch(e){}
+  render();
+};
+
 const DEFAULT_INFO = {
   clinicName: "St Joseph's Children's & Diabetic Clinic",
   tagline: "Caring for children and families managing diabetes.",
@@ -454,7 +519,7 @@ const DEFAULT_INFO = {
 };
 
 let state = {
-  view:'home', isAdmin:false, loginError:'', toast:'',
+  view:'home', isAdmin:false, loginError:'', toast:'', lang:'en',
   showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   chatOpen:false, chatMessages:[], chatTeaserVisible:false,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
@@ -2101,14 +2166,21 @@ function founderHtml(i){
 }
 
 /* ---------- public views ---------- */
+function langToggleHtml(){
+  return `<div class="lang-toggle">
+    <button class="${state.lang==='en'?'active':''}" onclick="setLang('en')">EN</button>
+    <button class="${state.lang==='ml'?'active':''}" onclick="setLang('ml')">മല</button>
+  </div>`;
+}
 function publicHeader(){
-  const links=[['home','Home'],['about','About'],['services','Services & Lab'],['blog','Blog'],['book','Book Appointment'],['feedback','Feedback']];
+  const links=[['home',t('nav_home')],['about',t('nav_about')],['services',t('nav_services')],['blog',t('nav_blog')],['book',t('nav_book')],['feedback',t('nav_feedback')]];
   return `<header class="site"><div class="container nav-row">
     <div class="logo">${logoMark()} ${escapeHtml(state.data.info.clinicName)}</div>
     <nav class="links">
       ${links.map(([v,l])=>`<button class="nav-page-btn ${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
-      ${state.showInstallButton?`<button class="btn btn-accent btn-small" style="margin-left:6px;" onclick="installApp()">⬇ Install app</button>`:''}
-      <button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">Staff Login</button>
+      ${langToggleHtml()}
+      ${state.showInstallButton?`<button class="btn btn-accent btn-small" style="margin-left:6px;" onclick="installApp()">${t('nav_install_app')}</button>`:''}
+      <button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">${t('nav_staff_login')}</button>
     </nav>
   </div>${state.showIosInstallHint?`<div class="container"><div class="top-alert" style="margin:0 0 14px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -2121,7 +2193,7 @@ function publicHeader(){
   </div></div>`:''}</header>${whatsappFloatButton()}${chatBotToggleButton()}${chatTeaserHtml()}${state.chatOpen?chatPanelHtml():''}${mobileTabBar()}`;
 }
 function mobileTabBar(){
-  const tabs=[['home','🏠','Home'],['services','🩺','Services'],['book','📅','Book'],['blog','📰','Blog'],['feedback','💬','Feedback']];
+  const tabs=[['home','🏠',t('tab_home')],['services','🩺',t('tab_services')],['book','📅',t('tab_book')],['blog','📰',t('tab_blog')],['feedback','💬',t('tab_feedback')]];
   return `<nav class="mobile-tabbar">
     ${tabs.map(([v,icon,l])=>`<button class="${state.view===v?'active':''}" onclick="setView('${v}')"><span class="icon">${icon}</span>${l}</button>`).join('')}
   </nav>`;
@@ -2131,13 +2203,13 @@ function publicFooter(){
   return `<footer class="site"><div class="container">
     <strong>${escapeHtml(i.clinicName)}</strong> &middot; ${escapeHtml(i.address)} &middot; ${escapeHtml(i.phone)}<br>${escapeHtml(i.hours)}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);">
-      &copy; ${new Date().getFullYear()} ${escapeHtml(i.clinicName)}. All rights reserved.
+      &copy; ${new Date().getFullYear()} ${escapeHtml(i.clinicName)}. ${t('footer_rights')}
     </div>
   </div></footer>`;
 }
 function doctorsHtml(){
   const docs=state.data.info.doctors||[];
-  if(!docs.length) return `<div class="empty-state"><div class="icon">🩺</div>Doctor details will appear here once added by clinic staff.</div>`;
+  if(!docs.length) return `<div class="empty-state"><div class="icon">🩺</div>${t('doctors_empty')}</div>`;
   return `<div class="grid grid-3">${docs.map(d=>{
     const hasContact = d.whatsapp || d.email;
     return `<div class="service-card">
@@ -2145,8 +2217,8 @@ function doctorsHtml(){
       <p style="margin-bottom:4px;">${escapeHtml(d.qualification)}</p>
       <p style="color:var(--accent);font-weight:600;${hasContact?'margin-bottom:12px;':'margin-bottom:0;'}">${escapeHtml(d.role)}</p>
       ${hasContact?`<div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${d.whatsapp?`<a class="btn btn-outline btn-small" href="${waLink(d.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>`:''}
-        ${d.email?`<a class="btn btn-outline btn-small" href="mailto:${escapeHtml(d.email)}">Email</a>`:''}
+        ${d.whatsapp?`<a class="btn btn-outline btn-small" href="${waLink(d.whatsapp)}" target="_blank" rel="noopener">${t('btn_whatsapp')}</a>`:''}
+        ${d.email?`<a class="btn btn-outline btn-small" href="mailto:${escapeHtml(d.email)}">${t('btn_email')}</a>`:''}
       </div>`:''}
     </div>`;
   }).join('')}</div>`;
@@ -2163,18 +2235,18 @@ function viewHome(){
   <div class="container hero">
     <div class="legacy-badge">🏆 ${yearsRunning}+ Years of Trusted Care — Serving Thodupuzha Since ${escapeHtml(String(i.foundedYear||1950))}</div>
     <h1 class="display">${escapeHtml(i.tagline)}</h1>
-    <p class="lead">Register for an OPD visit, check our services and lab tests, or request an appointment online.</p>
-    <button class="btn btn-accent" onclick="setView('book')">Request an appointment</button>
+    <p class="lead">${t('home_lead')}</p>
+    <button class="btn btn-accent" onclick="setView('book')">${t('home_cta')}</button>
     ${pulseDivider()}
     <div class="info-strip">
-      <div><div class="eyebrow">Address</div>${escapeHtml(i.address)}</div>
-      <div><div class="eyebrow">Phone</div>${escapeHtml(i.phone)}</div>
-      <div><div class="eyebrow">Hours</div>${escapeHtml(i.hours)}</div>
+      <div><div class="eyebrow">${t('label_address')}</div>${escapeHtml(i.address)}</div>
+      <div><div class="eyebrow">${t('label_phone')}</div>${escapeHtml(i.phone)}</div>
+      <div><div class="eyebrow">${t('label_hours')}</div>${escapeHtml(i.hours)}</div>
     </div>
   </div>
   <div class="container">
-  <section><h2 class="display" style="font-size:22px;">Our Doctors</h2>${doctorsHtml()}</section>
-  <section><h2 class="display" style="font-size:22px;">Recent from our blog</h2>${blogPreviewHtml()}</section>
+  <section><h2 class="display" style="font-size:22px;">${t('home_doctors_heading')}</h2>${doctorsHtml()}</section>
+  <section><h2 class="display" style="font-size:22px;">${t('home_blog_heading')}</h2>${blogPreviewHtml()}</section>
   </div>${publicFooter()}`;
 }
 function viewAbout(){
@@ -2182,76 +2254,76 @@ function viewAbout(){
   const welcomeParas = (i.welcomeText||'').split(/\n\n+/).filter(Boolean);
   return `${publicHeader()}<div class="container">
   <section style="max-width:720px;">
-    <h2 class="display">Welcome</h2>
+    <h2 class="display">${t('about_welcome_heading')}</h2>
     ${welcomeParas.length? welcomeParas.map(p=>`<p style="color:var(--text-muted);">${escapeHtml(p)}</p>`).join('') : `<p style="color:var(--text-muted);">${escapeHtml(i.tagline)}</p>`}
   </section>
   <section class="grid grid-2" style="align-items:start;">
     <div>
-      <h2 class="display">About us</h2>
+      <h2 class="display">${t('about_us_heading')}</h2>
       <p style="color:var(--text-muted);">${escapeHtml(i.aboutUsText||'')}</p>
     </div>
     ${founderHtml(i)}
   </section>
   <section>
-    <h2 class="display">Find us</h2>
+    <h2 class="display">${t('about_find_us_heading')}</h2>
     <div class="card">${findUsMapSvg()}</div>
-    <p style="color:var(--text-muted);font-size:12px;margin-top:8px;">Illustrative map — not to scale.</p>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:8px;">${t('about_map_note')}</p>
   </section>
   </div>${publicFooter()}`;
 }
 function viewServices(){
   const i=state.data.info;
   return `${publicHeader()}<div class="container">
-  <section><h2 class="display">Clinical services</h2>
-  ${i.services.length? `<div class="grid grid-3">${i.services.map(s=>`<div class="service-card"><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.description||'')}</p></div>`).join('')}</div>` : `<div class="empty-state"><div class="icon">🩺</div>Services will appear here once added by clinic staff.</div>`}
+  <section><h2 class="display">${t('services_heading')}</h2>
+  ${i.services.length? `<div class="grid grid-3">${i.services.map(s=>`<div class="service-card"><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.description||'')}</p></div>`).join('')}</div>` : `<div class="empty-state"><div class="icon">🩺</div>${t('services_empty')}</div>`}
   </section>
-  <section><h2 class="display">Lab tests</h2>
-  ${i.labTests.length? `<div class="grid grid-3">${i.labTests.map(s=>`<div class="service-card"><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.description||'')}</p></div>`).join('')}</div>` : `<div class="empty-state"><div class="icon">🧪</div>Lab tests will appear here once added by clinic staff.</div>`}
+  <section><h2 class="display">${t('labtests_heading')}</h2>
+  ${i.labTests.length? `<div class="grid grid-3">${i.labTests.map(s=>`<div class="service-card"><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.description||'')}</p></div>`).join('')}</div>` : `<div class="empty-state"><div class="icon">🧪</div>${t('labtests_empty')}</div>`}
   </section></div>${publicFooter()}`;
 }
 function viewBlog(){
   const posts=state.data.blogPosts;
-  return `${publicHeader()}<div class="container"><section><h2 class="display">Clinic blog</h2>
-  ${posts.length? posts.map(p=>`<div class="card" style="margin-bottom:14px;"><h3 style="margin:0 0 4px;">${escapeHtml(p.title)}</h3><div class="mono" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${escapeHtml(p.date||'')}</div><p style="margin:0;white-space:pre-wrap;">${escapeHtml(p.body||'')}</p></div>`).join('') : `<div class="empty-state"><div class="icon">📝</div>No posts yet.</div>`}
+  return `${publicHeader()}<div class="container"><section><h2 class="display">${t('blog_heading')}</h2>
+  ${posts.length? posts.map(p=>`<div class="card" style="margin-bottom:14px;"><h3 style="margin:0 0 4px;">${escapeHtml(p.title)}</h3><div class="mono" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${escapeHtml(p.date||'')}</div><p style="margin:0;white-space:pre-wrap;">${escapeHtml(p.body||'')}</p></div>`).join('') : `<div class="empty-state"><div class="icon">📝</div>${t('blog_empty')}</div>`}
   </section></div>${publicFooter()}`;
 }
 function viewBook(){
   return `${publicHeader()}<div class="container"><section style="max-width:500px;">
-  <h2 class="display">Request an appointment</h2>
-  <p style="color:var(--text-muted);">Fill this in and our staff will contact you to confirm.</p>
+  <h2 class="display">${t('book_heading')}</h2>
+  <p style="color:var(--text-muted);">${t('book_intro')}</p>
   <div class="card">
-    <div class="field"><label>Full name</label><input id="ap-name" type="text"></div>
-    <div class="field"><label>Phone number</label><input id="ap-phone" type="text"></div>
-    <div class="field"><label>Consultation type</label>
+    <div class="field"><label>${t('label_full_name')}</label><input id="ap-name" type="text"></div>
+    <div class="field"><label>${t('label_phone_number')}</label><input id="ap-phone" type="text"></div>
+    <div class="field"><label>${t('label_consultation_type')}</label>
       <select id="ap-type">
-        <option value="Pediatric Consultation">Pediatric Consultation</option>
-        <option value="Physician Consultation">Physician Consultation</option>
-        <option value="Online Consultation">Online Consultation</option>
+        <option value="Pediatric Consultation">${t('consult_pediatric')}</option>
+        <option value="Physician Consultation">${t('consult_physician')}</option>
+        <option value="Online Consultation">${t('consult_online')}</option>
       </select>
     </div>
-    <div class="field"><label>Preferred date</label><input id="ap-date" type="date"></div>
-    <div class="field"><label>Reason for visit</label><textarea id="ap-reason" rows="3"></textarea></div>
-    <button class="btn btn-primary" onclick="submitAppointment()">Submit request</button>
+    <div class="field"><label>${t('label_preferred_date')}</label><input id="ap-date" type="date"></div>
+    <div class="field"><label>${t('label_reason')}</label><textarea id="ap-reason" rows="3"></textarea></div>
+    <button class="btn btn-primary" onclick="submitAppointment()">${t('btn_submit_request')}</button>
   </div></section></div>${publicFooter()}`;
 }
 function viewFeedback(){
   return `${publicHeader()}<div class="container"><section style="max-width:500px;">
-  <h2 class="display">Share your feedback</h2>
-  <p style="color:var(--text-muted);">We'd love to hear about your experience at the clinic — it helps us do better.</p>
+  <h2 class="display">${t('feedback_heading')}</h2>
+  <p style="color:var(--text-muted);">${t('feedback_intro')}</p>
   <div class="card">
-    <div class="field"><label>Your name (optional)</label><input id="fb-name" type="text"></div>
-    <div class="field"><label>Phone (optional)</label><input id="fb-phone" type="text"></div>
-    <div class="field"><label>Rating</label>
+    <div class="field"><label>${t('label_your_name_optional')}</label><input id="fb-name" type="text"></div>
+    <div class="field"><label>${t('label_phone_optional')}</label><input id="fb-phone" type="text"></div>
+    <div class="field"><label>${t('label_rating')}</label>
       <select id="fb-rating">
-        <option value="5">★★★★★ Excellent</option>
-        <option value="4">★★★★ Good</option>
-        <option value="3">★★★ Average</option>
-        <option value="2">★★ Below average</option>
-        <option value="1">★ Poor</option>
+        <option value="5">${t('rating_5')}</option>
+        <option value="4">${t('rating_4')}</option>
+        <option value="3">${t('rating_3')}</option>
+        <option value="2">${t('rating_2')}</option>
+        <option value="1">${t('rating_1')}</option>
       </select>
     </div>
-    <div class="field"><label>Your feedback</label><textarea id="fb-message" rows="4" placeholder="Tell us what went well, or what we could do better…"></textarea></div>
-    <button class="btn btn-primary" onclick="submitFeedback()">Submit feedback</button>
+    <div class="field"><label>${t('label_your_feedback')}</label><textarea id="fb-message" rows="4" placeholder="${escapeHtml(t('feedback_placeholder'))}"></textarea></div>
+    <button class="btn btn-primary" onclick="submitFeedback()">${t('btn_submit_feedback')}</button>
   </div></section></div>${publicFooter()}`;
 }
 function viewAdminLogin(){
@@ -3091,6 +3163,7 @@ window.render = render;
 window.state = state;
 
 async function initApp(){
+  try{ if(localStorage.getItem('stjosephs_lang')==='ml') state.lang='ml'; }catch(e){}
   await loadClinicInfo();
   await loadBlogPosts();
   let seen = false;
