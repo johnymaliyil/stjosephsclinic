@@ -460,7 +460,7 @@ let state = {
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
-  patientCount:null, visitCount:null,
+  patientCount:null, visitCount:null, followUpsDue:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
@@ -2005,7 +2005,28 @@ async function loadDashboardStats(){
   catch(e){ console.error('Failed to load registered patient count', e); state.patientCount = null; }
   try{ state.visitCount = (await getCountFromServer(collection(db,'visits'))).data().count; }
   catch(e){ console.error('Failed to load patient visit count', e); state.visitCount = null; }
-  await loadMedicines();
+  await Promise.all([loadMedicines(), loadAppointments()]);
+  state.followUpsDue = await loadFollowUpsDue();
+}
+async function loadFollowUpsDue(){
+  try{
+    // Same equality-free, sort-client-side approach as loadLastVitals/loadPreviousVisits,
+    // avoiding a composite index for a query that would otherwise need one.
+    const snap = await getDocs(collection(db,'visits'));
+    const latestByPatient = {};
+    snap.docs.forEach(d=>{
+      const v = d.data();
+      if(!v.sugarValue || !v.date || !v.patientId) return;
+      if(!latestByPatient[v.patientId] || v.date > latestByPatient[v.patientId].date){
+        latestByPatient[v.patientId] = v;
+      }
+    });
+    const today = new Date();
+    return Object.values(latestByPatient)
+      .map(v=>({ ...v, daysSinceLastVisit: Math.round((today - new Date(v.date+'T00:00:00')) / 86400000) }))
+      .filter(v=>v.daysSinceLastVisit >= 90)
+      .sort((a,b)=>b.daysSinceLastVisit-a.daysSinceLastVisit);
+  }catch(e){ console.error('Could not load follow-ups due', e); return []; }
 }
 
 /* ---------- toast / router ---------- */
@@ -2265,8 +2286,62 @@ function adminShell(content){
     <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${content}</div>
   </div>`;
 }
+function lowStockAlertHtml(items){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger,#c0392b);">
+    <h3 style="margin-top:0;">⚠️ ${items.length} medicine${items.length>1?'s':''} low on stock</h3>
+    <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
+      ${items.slice(0,8).map(m=>`<li>${escapeHtml(m.name)} — ${escapeHtml(String(m.quantity))} ${escapeHtml(m.unit||'')} left</li>`).join('')}
+      ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
+    </ul>
+    <div class="row-actions">
+      ${target?`<button class="btn btn-outline btn-small" onclick="sendLowStockAlert()">Send alert via WhatsApp</button>`:''}
+      <button class="btn btn-outline btn-small" onclick="setView('admin-inventory')">View inventory</button>
+    </div>
+  </div>`;
+}
+window.sendLowStockAlert = function(){
+  const items = state.data.medicines.filter(m=>medStatus(m).label==='Low stock');
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const msg = `Low stock alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}: ${m.quantity} ${m.unit||''} left`).join('\n');
+  window.open(waLinkWithText(target, msg), '_blank');
+};
+function tomorrowAppointmentsHtml(appts){
+  return `<div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">📅 ${appts.length} appointment${appts.length>1?'s':''} tomorrow</h3>
+    ${appts.map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div><strong>${escapeHtml(a.name)}</strong> <span style="color:var(--text-muted);font-size:13px;">${escapeHtml(a.consultationType||'')}</span></div>
+      <button class="btn btn-outline btn-small" onclick="sendAppointmentWhatsApp('${a.id}')">Send reminder</button>
+    </div>`).join('')}
+  </div>`;
+}
+function followUpsDueHtml(list){
+  return `<div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">🩸 ${list.length} diabetic follow-up${list.length>1?'s':''} due</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Patients whose last recorded blood sugar reading was 90+ days ago.</p>
+    ${list.slice(0,10).map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div><strong>${escapeHtml(v.patientName||'')}</strong> <span style="color:var(--text-muted);font-size:13px;">Last visit ${escapeHtml(v.date||'')} — ${v.daysSinceLastVisit} days ago</span></div>
+      ${v.patientPhone?`<button class="btn btn-outline btn-small" onclick="sendFollowUpReminder('${v.patientId}')">Send reminder</button>`:''}
+    </div>`).join('')}
+    ${list.length>10?`<p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">and ${list.length-10} more…</p>`:''}
+  </div>`;
+}
+window.sendFollowUpReminder = function(patientId){
+  const v = (state.followUpsDue||[]).find(x=>x.patientId===patientId);
+  if(!v || !v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  const i = state.data.info;
+  const msg = `Hi ${v.patientName||'there'}, this is ${i.clinicName}. It's been a while since your last diabetes check-up — please book a follow-up visit when convenient. You can reply here or call us at ${i.phone}.`;
+  window.open(waLinkWithText(v.patientPhone, msg), '_blank');
+};
 function viewAdminDashboard(){
   const meds=state.data.medicines;
+  const lowStock = meds.filter(m=>medStatus(m).label==='Low stock');
+  const tomorrow = (()=>{ const d=new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })();
+  const tomorrowAppts = state.data.appointments.filter(a=>a.date===tomorrow && a.status!=='done' && a.status!=='cancelled');
+  const followUps = state.followUpsDue||[];
   return adminShell(`
     <h2 class="display">Overview</h2>
     <div class="stat-row">
@@ -2274,6 +2349,9 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
+    ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
+    ${tomorrowAppts.length? tomorrowAppointmentsHtml(tomorrowAppts) : ''}
+    ${followUps.length? followUpsDueHtml(followUps) : ''}
     <p style="color:var(--text-muted);font-size:14px;">Data is stored in your clinic's own Firebase project, accessible from any device where staff log in. Not a HIPAA/DPDP-compliant medical records system — treat it as an internal working tool.</p>
   `);
 }
