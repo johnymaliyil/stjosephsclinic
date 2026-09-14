@@ -463,7 +463,7 @@ let state = {
   patientCount:null, visitCount:null,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -927,7 +927,7 @@ window.loadMoreVisits = function(){ loadVisitsPage(false); };
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false };
 }
 async function loadLastVitals(patientId){
   try{
@@ -942,6 +942,31 @@ async function loadLastVitals(patientId){
     if(!v) return null;
     return { date:v.date, weight:v.weight, height:v.height, bp:v.bp, sugarValue:v.sugarValue, sugarType:v.sugarType };
   }catch(e){ console.error('Could not load last vitals', e); return null; }
+}
+async function loadPreviousVisits(patientId, excludeVisitId){
+  try{
+    // Same equality-only filter as loadLastVitals, sorted client-side to avoid
+    // needing a composite index.
+    const q = query(collection(db,'visits'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d=>({id:d.id,...d.data()}))
+      .filter(v=>v.id!==excludeVisitId)
+      .sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+  }catch(e){ console.error('Could not load previous visits', e); return []; }
+}
+function previousVisitsHtml(visits){
+  if(!visits.length) return `<p style="color:var(--text-muted);font-size:13px;margin:8px 0 0;">No previous visits on record.</p>`;
+  return `<div class="card" style="margin-top:8px;max-height:320px;overflow-y:auto;">
+    ${visits.map(v=>`<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <strong class="mono">${escapeHtml(v.date||'')}</strong>
+        ${v.doctorName?`<span style="color:var(--text-muted);font-size:12px;">${escapeHtml(v.doctorName)}</span>`:''}
+      </div>
+      ${v.reason?`<div style="margin-top:2px;">${escapeHtml(v.reason)}</div>`:''}
+      ${(v.medicines&&v.medicines.length)?`<div style="margin-top:4px;font-size:13px;color:var(--text-muted);">${v.medicines.map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.source==='outside'?' (to order)':''}`).join(', ')}</div>`:''}
+      ${vitalsSummary(v)?`<div class="mono" style="margin-top:4px;font-size:12px;color:var(--text-muted);">${escapeHtml(vitalsSummary(v))}</div>`:''}
+    </div>`).join('')}
+  </div>`;
 }
 window.setVisitPatientSearchField = function(field){
   state.visitForm.patientSearchField = field;
@@ -964,14 +989,24 @@ window.searchVisitPatient = async function(term){
 };
 window.selectVisitPatient = async function(id){
   const p = state.visitForm.patientResults.find(x=>x.id===id);
-  if(p){ state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[]; state.visitForm.lastVitals=null; }
+  if(p){
+    state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[];
+    state.visitForm.lastVitals=null; state.visitForm.previousVisits=[]; state.visitForm.showPreviousVisits=false;
+    state.visitForm.previousVisitsLoading=true;
+  }
   render();
   if(p){
-    state.visitForm.lastVitals = await loadLastVitals(p.id);
-    if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===p.id) render();
+    const [lastVitals, previousVisits] = await Promise.all([loadLastVitals(p.id), loadPreviousVisits(p.id)]);
+    if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===p.id){
+      state.visitForm.lastVitals = lastVitals;
+      state.visitForm.previousVisits = previousVisits;
+      state.visitForm.previousVisitsLoading = false;
+      render();
+    }
   }
 };
 window.clearVisitPatient = function(){ state.visitForm.selectedPatient = null; render(); };
+window.toggleShowPreviousVisits = function(){ state.visitForm.showPreviousVisits = !state.visitForm.showPreviousVisits; render(); };
 window.addVisitMedRow = function(){ state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
 window.removeVisitMedRow = function(idx){ state.visitForm.meds.splice(idx,1); if(!state.visitForm.meds.length) state.visitForm.meds.push({source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}); render(); };
 window.updateVisitMedRow = function(idx,key,val){
@@ -979,7 +1014,7 @@ window.updateVisitMedRow = function(idx,key,val){
   row[key]=val;
   if(key==='source'){ row.medicineId=''; row.name=''; row.quantity=''; render(); }
 };
-window.editVisit = function(id){
+window.editVisit = async function(id){
   const v = state.data.visits.find(x=>x.id===id);
   if(!v) return;
   state.editingVisit = v;
@@ -988,9 +1023,16 @@ window.editVisit = function(id){
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
     meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({source:m.source||(m.medicineId?'pharmacy':'outside'),medicineId:m.medicineId||'',name:m.name||'',quantity:m.quantity||'',dosage:m.dosage||''})) : [{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}],
-    weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null
+    weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null,
+    previousVisits:[], previousVisitsLoading:true, showPreviousVisits:false
   };
   render(); window.scrollTo(0,0);
+  const previousVisits = await loadPreviousVisits(v.patientId, v.id);
+  if(state.editingVisit && state.editingVisit.id===id){
+    state.visitForm.previousVisits = previousVisits;
+    state.visitForm.previousVisitsLoading = false;
+    render();
+  }
 };
 window.deleteVisit = async function(id){
   const v = state.data.visits.find(x=>x.id===id);
@@ -2293,6 +2335,10 @@ function viewAdminVisits(){
   const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
+    ${f.selectedPatient ? `<div class="field">
+      <button class="btn btn-outline btn-small" onclick="toggleShowPreviousVisits()">${f.previousVisitsLoading?'Loading previous visits…':`${f.showPreviousVisits?'Hide':'Show'} previous visits (${f.previousVisits.length})`}</button>
+      ${f.showPreviousVisits ? previousVisitsHtml(f.previousVisits) : ''}
+    </div>` : ''}
     <div class="form-grid">
       <div class="field"><label>Visit date</label><input id="vf-date" type="date" value="${escapeHtml(f.date)}"></div>
       <div class="field"><label>Doctor</label><select id="vf-doctor"><option value="">— Not specified —</option>${doctorOptions}</select></div>
