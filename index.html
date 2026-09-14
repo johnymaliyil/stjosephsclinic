@@ -1773,6 +1773,7 @@ function filteredReportBills(){
   ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 }
 window.setReportDetailFilter = function(date, method, label){ state.reportDetailFilter = {date:date||null, method:method||null, label}; render(); };
+window.setReportMedicineFilter = function(medicineKey, label){ state.reportDetailFilter = {medicine:medicineKey, label}; render(); };
 window.clearReportDetailFilter = function(){ state.reportDetailFilter = null; render(); };
 function reportTotals(bills){
   let cash=0, upi=0, medTotal=0, extraTotal=0, consultationTotal=0;
@@ -1830,6 +1831,19 @@ function filteredReportVisits(){
     (!f.method || (f.method==='billed' ? !!v.billId : !v.billId))
   ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 }
+function filteredReportOutsideMeds(){
+  const f = state.reportDetailFilter;
+  if(!f || !f.medicine) return [];
+  const rows = [];
+  state.reportVisitsList.forEach(v=>{
+    (v.medicines||[]).forEach(m=>{
+      if(m.source==='outside' && (m.name||'').trim().toLowerCase()===f.medicine){
+        rows.push({ date:v.date, patientName:v.patientName, patientOpdNo:v.patientOpdNo, dosage:m.dosage||'' });
+      }
+    });
+  });
+  return rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
 function visitsReportTotals(visits){
   let billed=0, unbilled=0;
   visits.forEach(v=>{ if(v.billId) billed++; else unbilled++; });
@@ -1853,7 +1867,7 @@ function inventoryReportAggregates(visits){
       const key = (m.name||'').trim().toLowerCase();
       if(!key) return;
       if(m.source==='outside'){
-        if(!toOrder[key]) toOrder[key] = {name:m.name, count:0};
+        if(!toOrder[key]) toOrder[key] = {key, name:m.name, count:0};
         toOrder[key].count++;
       }else{
         if(!dispensed[key]) dispensed[key] = {name:m.name, qty:0, visits:0};
@@ -3006,8 +3020,21 @@ function reportTabVisits(){
 function reportTabInventory(){
   const agg = inventoryReportAggregates(state.reportVisitsList);
   const dispensedRows = agg.dispensed.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.qty}</td><td class="mono">${m.visits}</td></tr>`).join('');
-  const toOrderRows = agg.toOrder.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.count}</td></tr>`).join('');
+  const toOrderRows = agg.toOrder.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono"><span class="report-amount" onclick="setReportMedicineFilter('${m.key.replace(/'/g,"\\'")}','${escapeHtml(m.name)} — prescribed externally')">${m.count}</span></td></tr>`).join('');
   const totalUnits = agg.dispensed.reduce((s,m)=>s+m.qty,0);
+  const detail = (state.reportDetailFilter && state.reportDetailFilter.medicine) ? (()=>{
+    const rows = filteredReportOutsideMeds();
+    const bodyRows = rows.map(r=>`<tr>
+      <td class="mono">${escapeHtml(r.date||'')}</td>
+      <td>${escapeHtml(r.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
+      <td>${escapeHtml(r.dosage||'')}</td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${rows.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Dosage / instructions</th></tr></thead><tbody>${bodyRows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">💊</div>No matching prescriptions in this date range.</div>`}
+    </div>`;
+  })() : '';
   return `
     <div class="stat-row">
       <div class="stat-card"><div class="num">${totalUnits}</div><div class="label">Units dispensed</div></div>
@@ -3020,13 +3047,14 @@ function reportTabInventory(){
         dispensedRows ? `<table><thead><tr><th>Medicine</th><th>Qty dispensed</th><th>Visits</th></tr></thead><tbody>${dispensedRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">💊</div>No medicines dispensed in this date range.</div>`}
     </div>
-    <h3>Medicines to order</h3>
-    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Prescribed externally (not from our pharmacy) during this date range — see Patient Visits for details.</p>
+    <h3>Medicines prescribed from outside</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Prescribed externally (not from our pharmacy) during this date range. Click a count to see who and when.</p>
     <div class="table-wrap">
       ${state.visitsReportLoading? loadingSkeleton(3) :
         toOrderRows ? `<table><thead><tr><th>Medicine</th><th>Times requested</th></tr></thead><tbody>${toOrderRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">✅</div>Nothing prescribed externally in this date range.</div>`}
-    </div>`;
+    </div>
+    ${detail}`;
 }
 function reportTabLabTests(){
   const totals = labReportTotals(state.reportLabRecords);
