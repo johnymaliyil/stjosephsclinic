@@ -444,7 +444,7 @@ const TRANSLATIONS = {
     blog_heading:'Clinic blog', blog_empty:'No posts yet.',
     book_heading:'Request an appointment', book_intro:'Fill this in and our staff will contact you to confirm.',
     label_full_name:'Full name', label_phone_number:'Phone number', label_consultation_type:'Consultation type',
-    consult_pediatric:'Pediatric Consultation', consult_physician:'Physician Consultation', consult_online:'Online Consultation',
+    consult_pediatric:'Pediatric Consultation', consult_physician:'Physician Consultation', consult_online:'Online Consultation', consult_labtest:'Lab Test',
     label_preferred_date:'Preferred date', label_reason:'Reason for visit', btn_submit_request:'Submit request',
     feedback_heading:'Share your feedback', feedback_intro:"We'd love to hear about your experience at the clinic — it helps us do better.",
     label_your_name_optional:'Your name (optional)', label_phone_optional:'Phone (optional)', label_rating:'Rating',
@@ -487,7 +487,7 @@ const TRANSLATIONS = {
     blog_heading:'ക്ലിനിക് ബ്ലോഗ്', blog_empty:'ഇതുവരെ പോസ്റ്റുകളൊന്നുമില്ല.',
     book_heading:'അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക', book_intro:'ഇത് പൂരിപ്പിക്കുക, സ്ഥിരീകരിക്കാൻ ഞങ്ങളുടെ സ്റ്റാഫ് നിങ്ങളെ ബന്ധപ്പെടും.',
     label_full_name:'പൂർണ്ണ നാമം', label_phone_number:'ഫോൺ നമ്പർ', label_consultation_type:'കൺസൾട്ടേഷൻ തരം',
-    consult_pediatric:'ശിശുരോഗ കൺസൾട്ടേഷൻ', consult_physician:'ഫിസിഷ്യൻ കൺസൾട്ടേഷൻ', consult_online:'ഓൺലൈൻ കൺസൾട്ടേഷൻ',
+    consult_pediatric:'ശിശുരോഗ കൺസൾട്ടേഷൻ', consult_physician:'ഫിസിഷ്യൻ കൺസൾട്ടേഷൻ', consult_online:'ഓൺലൈൻ കൺസൾട്ടേഷൻ', consult_labtest:'ലാബ് ടെസ്റ്റ്',
     label_preferred_date:'ഇഷ്ടപ്പെട്ട തീയതി', label_reason:'സന്ദർശനത്തിന്റെ കാരണം', btn_submit_request:'അഭ്യർത്ഥന സമർപ്പിക്കുക',
     feedback_heading:'നിങ്ങളുടെ അഭിപ്രായം പങ്കിടുക', feedback_intro:'ക്ലിനിക്കിലെ നിങ്ങളുടെ അനുഭവത്തെക്കുറിച്ച് അറിയാൻ ഞങ്ങൾ ആഗ്രഹിക്കുന്നു — ഇത് മെച്ചപ്പെടാൻ ഞങ്ങളെ സഹായിക്കുന്നു.',
     label_your_name_optional:'നിങ്ങളുടെ പേര് (ഐച്ഛികം)', label_phone_optional:'ഫോൺ (ഐച്ഛികം)', label_rating:'റേറ്റിംഗ്',
@@ -2338,6 +2338,7 @@ function viewBook(){
         <option value="Pediatric Consultation">${t('consult_pediatric')}</option>
         <option value="Physician Consultation">${t('consult_physician')}</option>
         <option value="Online Consultation">${t('consult_online')}</option>
+        <option value="Lab Test">${t('consult_labtest')}</option>
       </select>
     </div>
     <div class="field"><label>${t('label_preferred_date')}</label><input id="ap-date" type="date"></div>
