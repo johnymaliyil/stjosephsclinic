@@ -571,7 +571,7 @@ const DEFAULT_INFO = {
 };
 
 let state = {
-  view:'home', isAdmin:false, loginError:'', toast:'', lang:'en',
+  view: isDirectStaffEntry() ? 'admin-login' : 'home', isAdmin:false, loginError:'', toast:'', lang:'en',
   showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   chatOpen:false, chatMessages:[], chatTeaserVisible:false,
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
@@ -2037,10 +2037,11 @@ onAuthStateChanged(auth, (user)=>{
       return;
     }
   }
-  if(user && state.view==='home'){
+  if(user && (state.view==='home' || state.view==='admin-login')){
     let savedView = null;
     try{ savedView = localStorage.getItem('lastAdminView'); }catch(e){}
     if(savedView && savedView.startsWith('admin-') && savedView!=='admin-login'){ setView(savedView); return; }
+    if(state.view==='admin-login'){ setView('admin-dashboard'); return; }
   }
   render();
 });
@@ -2237,6 +2238,11 @@ function isStaffAccess(){
     if(window.navigator.standalone===true) return true; // iOS home-screen PWA
   }catch(e){}
   return false;
+}
+// True only for a direct "/staff" (?staff=1) link — not the PWA-standalone case —
+// so that entry point can skip straight to a bare login screen.
+function isDirectStaffEntry(){
+  try{ return new URLSearchParams(location.search).get('staff')==='1'; }catch(e){ return false; }
 }
 function publicHeader(){
   const links=[['home',t('nav_home')],['about',t('nav_about')],['services',t('nav_services')],['blog',t('nav_blog')],['book',t('nav_book')],['feedback',t('nav_feedback')]];
@@ -2526,14 +2532,25 @@ window.submitHealthCheck = function(){
   setTimeout(()=>{ document.getElementById('hc-result')?.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
 };
 function viewAdminLogin(){
-  return `${publicHeader()}<div class="container"><section style="max-width:360px;">
-  <h2 class="display">Staff login</h2>
-  <div class="card">
+  const loginCard = `<div class="card">
     ${state.loginError?`<div class="top-alert">${escapeHtml(state.loginError)}</div>`:''}
     <div class="field"><label>Username</label><input id="admin-email" type="text" placeholder="admin"></div>
     <div class="field"><label>Password</label><input id="admin-pass" type="password" onkeydown="if(event.key==='Enter')tryAdminLogin()"></div>
     <button class="btn btn-primary" onclick="tryAdminLogin()">Log in</button>
-  </div></section></div>${publicFooter()}`;
+  </div>`;
+  if(isDirectStaffEntry()){
+    // Direct /staff link: a bare login screen only, no public homepage/nav.
+    return `<div class="container" style="min-height:90vh;display:flex;align-items:center;justify-content:center;">
+      <section style="max-width:360px;width:100%;">
+        <div style="text-align:center;margin-bottom:18px;">${logoMark()}<h2 class="display" style="margin:8px 0 0;">${escapeHtml(state.data.info.clinicName)}</h2>
+        <p style="color:var(--text-muted);margin:2px 0 0;">Staff login</p></div>
+        ${loginCard}
+      </section></div>`;
+  }
+  return `${publicHeader()}<div class="container"><section style="max-width:360px;">
+  <h2 class="display">Staff login</h2>
+  ${loginCard}
+  </section></div>${publicFooter()}`;
 }
 
 /* ---------- admin shell ---------- */
