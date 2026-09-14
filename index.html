@@ -417,7 +417,24 @@ const TRANSLATIONS = {
     nav_home:'Home', nav_about:'About', nav_services:'Services & Lab', nav_blog:'Blog', nav_book:'Book Appointment', nav_feedback:'Feedback',
     nav_staff_login:'Staff Login', nav_install_app:'⬇ Install app',
     home_lead:'Register for an OPD visit, check our services and lab tests, or request an appointment online.',
-    home_cta:'Request an appointment',
+    home_cta:'Request an appointment', home_healthcheck_cta:'Health Check',
+    healthcheck_heading:'Health Check',
+    healthcheck_intro:"Answer a few quick questions and we'll suggest which checkups and lab tests are generally recommended for you, and how often.",
+    label_age:'Age (years)', label_gender:'Gender', label_height:'Height (cm)', label_weight:'Weight (kg)',
+    label_family_diabetes:'Family history of diabetes?', opt_no:'No', opt_yes:'Yes', opt_unsure:'Not sure',
+    btn_get_recommendations:'Get my recommendations',
+    healthcheck_results_heading:'Your recommended checkups',
+    healthcheck_bmi_prefix:'Your BMI is', healthcheck_bmi_hint:'Enter your height and weight to also see your BMI.',
+    healthcheck_col_check:'Check / Lab test', healthcheck_col_freq:'How often',
+    healthcheck_disclaimer:'This is general wellness guidance based on commonly recommended screening intervals — not a medical diagnosis. Please book an appointment with our doctors for advice specific to you.',
+    bmi_underweight:'Underweight', bmi_normal:'Normal', bmi_overweight:'Overweight', bmi_obese:'Obese',
+    check_bp:'Blood pressure check', check_sugar:'Blood sugar (Fasting) / HbA1c', check_lipid:'Cholesterol / Lipid profile',
+    check_general:'General physical checkup', check_thyroid:'Thyroid profile', check_ecg:'ECG / cardiac screening',
+    check_diabetic_consult:'Diabetic care consultation', check_pediatric_growth:'Pediatric growth & vaccination check',
+    check_pediatric_general:'General pediatric health checkup',
+    freq_yearly:'Every year', freq_1_2_years:'Every 1–2 years', freq_3_years:'Every 3 years', freq_4_6_years:'Every 4–6 years',
+    freq_2_3_years:'Every 2–3 years', freq_6_12_months:'Every 6–12 months', freq_recommended_book:'Recommended — please book a visit',
+    freq_1_2_years_advised:'Every 1–2 years, or as advised by your doctor',
     label_address:'Address', label_phone:'Phone', label_hours:'Hours',
     home_doctors_heading:'Our Doctors', home_blog_heading:'Recent from our blog',
     about_welcome_heading:'Welcome', about_us_heading:'About us', about_find_us_heading:'Find us',
@@ -443,7 +460,24 @@ const TRANSLATIONS = {
     nav_home:'ഹോം', nav_about:'ഞങ്ങളെക്കുറിച്ച്', nav_services:'സേവനങ്ങൾ & ലാബ്', nav_blog:'ബ്ലോഗ്', nav_book:'അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യുക', nav_feedback:'അഭിപ്രായം',
     nav_staff_login:'സ്റ്റാഫ് ലോഗിൻ', nav_install_app:'⬇ ആപ്പ് ഇൻസ്റ്റാൾ ചെയ്യുക',
     home_lead:'OPD സന്ദർശനത്തിന് രജിസ്റ്റർ ചെയ്യുക, ഞങ്ങളുടെ സേവനങ്ങളും ലാബ് ടെസ്റ്റുകളും പരിശോധിക്കുക, അല്ലെങ്കിൽ ഓൺലൈനായി അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക.',
-    home_cta:'അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക',
+    home_cta:'അപ്പോയിന്റ്മെന്റ് അഭ്യർത്ഥിക്കുക', home_healthcheck_cta:'ഹെൽത്ത് ചെക്ക്',
+    healthcheck_heading:'ഹെൽത്ത് ചെക്ക്',
+    healthcheck_intro:'കുറച്ച് ചോദ്യങ്ങൾക്ക് ഉത്തരം നൽകുക, നിങ്ങൾക്ക് പൊതുവെ ശുപാർശ ചെയ്യുന്ന പരിശോധനകളും ലാബ് ടെസ്റ്റുകളും അവ എത്ര തവണ വേണമെന്നും ഞങ്ങൾ നിർദ്ദേശിക്കാം.',
+    label_age:'വയസ്സ്', label_gender:'ലിംഗം', label_height:'ഉയരം (സെ.മീ)', label_weight:'ഭാരം (കി.ഗ്രാം)',
+    label_family_diabetes:'കുടുംബത്തിൽ പ്രമേഹ ചരിത്രമുണ്ടോ?', opt_no:'ഇല്ല', opt_yes:'ഉണ്ട്', opt_unsure:'ഉറപ്പില്ല',
+    btn_get_recommendations:'എന്റെ ശുപാർശകൾ നേടുക',
+    healthcheck_results_heading:'നിങ്ങൾക്ക് ശുപാർശ ചെയ്യുന്ന പരിശോധനകൾ',
+    healthcheck_bmi_prefix:'നിങ്ങളുടെ BMI ആണ്', healthcheck_bmi_hint:'നിങ്ങളുടെ BMI കൂടി കാണാൻ ഉയരവും ഭാരവും നൽകുക.',
+    healthcheck_col_check:'പരിശോധന / ലാബ് ടെസ്റ്റ്', healthcheck_col_freq:'എത്ര തവണ',
+    healthcheck_disclaimer:'ഇത് പൊതുവായി ശുപാർശ ചെയ്യുന്ന പരിശോധനാ ഇടവേളകളെ അടിസ്ഥാനമാക്കിയുള്ള പൊതു ആരോഗ്യ മാർഗ്ഗനിർദ്ദേശം മാത്രമാണ് — ഒരു രോഗനിർണയമല്ല. നിങ്ങൾക്ക് പ്രത്യേകമായുള്ള ഉപദേശത്തിന് ഞങ്ങളുടെ ഡോക്ടർമാരെ സന്ദർശിക്കാൻ അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യുക.',
+    bmi_underweight:'ഭാരക്കുറവ്', bmi_normal:'സാധാരണം', bmi_overweight:'അമിതഭാരം', bmi_obese:'സ്ഥൂലത',
+    check_bp:'രക്തസമ്മർദ്ദ പരിശോധന', check_sugar:'രക്തത്തിലെ പഞ്ചസാര (ഫാസ്റ്റിംഗ്) / HbA1c', check_lipid:'കൊളസ്ട്രോൾ / ലിപിഡ് പ്രൊഫൈൽ',
+    check_general:'പൊതു ശാരീരിക പരിശോധന', check_thyroid:'തൈറോയ്ഡ് പ്രൊഫൈൽ', check_ecg:'ECG / ഹൃദയ പരിശോധന',
+    check_diabetic_consult:'പ്രമേഹ പരിചരണ കൺസൾട്ടേഷൻ', check_pediatric_growth:'ശിശു വളർച്ചാ & വാക്സിനേഷൻ പരിശോധന',
+    check_pediatric_general:'പൊതു ശിശു ആരോഗ്യ പരിശോധന',
+    freq_yearly:'എല്ലാ വർഷവും', freq_1_2_years:'ഓരോ 1–2 വർഷത്തിലും', freq_3_years:'ഓരോ 3 വർഷത്തിലും', freq_4_6_years:'ഓരോ 4–6 വർഷത്തിലും',
+    freq_2_3_years:'ഓരോ 2–3 വർഷത്തിലും', freq_6_12_months:'ഓരോ 6–12 മാസത്തിലും', freq_recommended_book:'ശുപാർശ ചെയ്യുന്നു — ദയവായി ഒരു സന്ദർശനം ബുക്ക് ചെയ്യുക',
+    freq_1_2_years_advised:'ഓരോ 1–2 വർഷത്തിലും, അല്ലെങ്കിൽ ഡോക്ടർ നിർദ്ദേശിക്കുന്ന പ്രകാരം',
     label_address:'വിലാസം', label_phone:'ഫോൺ', label_hours:'സമയം',
     home_doctors_heading:'ഞങ്ങളുടെ ഡോക്ടർമാർ', home_blog_heading:'ബ്ലോഗിൽ നിന്നുള്ള പുതിയവ',
     about_welcome_heading:'സ്വാഗതം', about_us_heading:'ഞങ്ങളെക്കുറിച്ച്', about_find_us_heading:'ഞങ്ങളെ കണ്ടെത്തുക',
@@ -522,6 +556,7 @@ let state = {
   view:'home', isAdmin:false, loginError:'', toast:'', lang:'en',
   showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   chatOpen:false, chatMessages:[], chatTeaserVisible:false,
+  healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
@@ -2118,6 +2153,7 @@ window.setView = async function(v){
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
   if(v==='admin-whatsapp') await loadWhatsappCampaigns();
+  if(v==='healthcheck'){ state.healthCheckForm = { age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }; state.healthCheckResult = null; }
   render();
 };
 function setView(v){ window.setView(v); }
@@ -2236,7 +2272,10 @@ function viewHome(){
     <div class="legacy-badge">🏆 ${yearsRunning}+ Years of Trusted Care — Serving Thodupuzha Since ${escapeHtml(String(i.foundedYear||1950))}</div>
     <h1 class="display">${escapeHtml(i.tagline)}</h1>
     <p class="lead">${t('home_lead')}</p>
-    <button class="btn btn-accent" onclick="setView('book')">${t('home_cta')}</button>
+    <div class="row-actions">
+      <button class="btn btn-accent" onclick="setView('book')">${t('home_cta')}</button>
+      <button class="btn btn-outline" onclick="setView('healthcheck')">🩺 ${t('home_healthcheck_cta')}</button>
+    </div>
     ${pulseDivider()}
     <div class="info-strip">
       <div><div class="eyebrow">${t('label_address')}</div>${escapeHtml(i.address)}</div>
@@ -2326,6 +2365,88 @@ function viewFeedback(){
     <button class="btn btn-primary" onclick="submitFeedback()">${t('btn_submit_feedback')}</button>
   </div></section></div>${publicFooter()}`;
 }
+function healthCheckRecommendations(f){
+  const age = Number(f.age)||0;
+  const heightM = Number(f.height)/100;
+  const weight = Number(f.weight);
+  const bmi = (heightM>0 && weight>0) ? weight/(heightM*heightM) : null;
+  let bmiCategoryKey = '';
+  if(bmi!==null){
+    if(bmi<18.5) bmiCategoryKey='bmi_underweight';
+    else if(bmi<23) bmiCategoryKey='bmi_normal';
+    else if(bmi<25) bmiCategoryKey='bmi_overweight';
+    else bmiCategoryKey='bmi_obese';
+  }
+  const highRisk = f.familyHistory==='yes' || (bmi!==null && bmi>=23);
+  const checks = [];
+  if(age>0 && age<18){
+    checks.push({nameKey:'check_pediatric_growth', freqKey:'freq_yearly'});
+    checks.push({nameKey:'check_pediatric_general', freqKey:'freq_yearly'});
+  }else{
+    checks.push({nameKey:'check_bp', freqKey: age>=40 ? 'freq_yearly' : 'freq_1_2_years'});
+    checks.push({nameKey:'check_sugar', freqKey: highRisk ? 'freq_6_12_months' : (age>=40 ? 'freq_yearly' : 'freq_3_years')});
+    checks.push({nameKey:'check_lipid', freqKey: age>=40 ? 'freq_1_2_years' : 'freq_4_6_years'});
+    checks.push({nameKey:'check_general', freqKey: age>=40 ? 'freq_yearly' : 'freq_2_3_years'});
+    if(age>=40){
+      checks.push({nameKey:'check_thyroid', freqKey:'freq_1_2_years'});
+      checks.push({nameKey:'check_ecg', freqKey:'freq_1_2_years_advised'});
+    }
+    if(bmi!==null && bmi>=25){
+      checks.push({nameKey:'check_diabetic_consult', freqKey:'freq_recommended_book'});
+    }
+  }
+  return { bmi, bmiCategoryKey, checks };
+}
+function healthCheckResultHtml(r){
+  const bmiLine = r.bmi!==null
+    ? `<p>${escapeHtml(t('healthcheck_bmi_prefix'))} <strong>${r.bmi.toFixed(1)}</strong> (${escapeHtml(t(r.bmiCategoryKey))}).</p>`
+    : `<p style="color:var(--text-muted);">${escapeHtml(t('healthcheck_bmi_hint'))}</p>`;
+  const rows = r.checks.map(c=>`<tr><td>${escapeHtml(t(c.nameKey))}</td><td>${escapeHtml(t(c.freqKey))}</td></tr>`).join('');
+  return `<div class="card" id="hc-result" style="margin-top:16px;border-left:4px solid var(--primary);">
+    <h3 style="margin-top:0;">${t('healthcheck_results_heading')}</h3>
+    ${bmiLine}
+    <div class="table-wrap"><table><thead><tr><th>${t('healthcheck_col_check')}</th><th>${t('healthcheck_col_freq')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:12px;">${escapeHtml(t('healthcheck_disclaimer'))}</p>
+    <button class="btn btn-accent" style="margin-top:8px;" onclick="setView('book')">${t('home_cta')}</button>
+  </div>`;
+}
+function viewHealthCheck(){
+  const f = state.healthCheckForm;
+  const r = state.healthCheckResult;
+  return `${publicHeader()}<div class="container"><section style="max-width:560px;">
+  <h2 class="display">🩺 ${t('healthcheck_heading')}</h2>
+  <p style="color:var(--text-muted);">${t('healthcheck_intro')}</p>
+  <div class="card">
+    <div class="form-grid">
+      <div class="field"><label>${t('label_age')}</label><input id="hc-age" type="number" min="0" max="120" value="${escapeHtml(f.age)}"></div>
+      <div class="field"><label>${t('label_gender')}</label><select id="hc-gender">${['Male','Female','Other'].map(g=>`<option ${f.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
+      <div class="field"><label>${t('label_height')}</label><input id="hc-height" type="number" min="0" value="${escapeHtml(f.height)}"></div>
+      <div class="field"><label>${t('label_weight')}</label><input id="hc-weight" type="number" min="0" value="${escapeHtml(f.weight)}"></div>
+      <div class="field" style="grid-column:1/-1;"><label>${t('label_family_diabetes')}</label>
+        <select id="hc-family">
+          <option value="no" ${f.familyHistory==='no'?'selected':''}>${t('opt_no')}</option>
+          <option value="yes" ${f.familyHistory==='yes'?'selected':''}>${t('opt_yes')}</option>
+          <option value="unsure" ${f.familyHistory==='unsure'?'selected':''}>${t('opt_unsure')}</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="submitHealthCheck()">${t('btn_get_recommendations')}</button>
+  </div>
+  ${r ? healthCheckResultHtml(r) : ''}
+  </section></div>${publicFooter()}`;
+}
+window.submitHealthCheck = function(){
+  const f = state.healthCheckForm;
+  f.age = document.getElementById('hc-age').value;
+  f.gender = document.getElementById('hc-gender').value;
+  f.height = document.getElementById('hc-height').value;
+  f.weight = document.getElementById('hc-weight').value;
+  f.familyHistory = document.getElementById('hc-family').value;
+  if(!f.age){ showToast('Please enter your age.'); return; }
+  state.healthCheckResult = healthCheckRecommendations(f);
+  render();
+  setTimeout(()=>{ document.getElementById('hc-result')?.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
+};
 function viewAdminLogin(){
   return `${publicHeader()}<div class="container"><section style="max-width:360px;">
   <h2 class="display">Staff login</h2>
@@ -3143,6 +3264,7 @@ function render(){
       case 'admin-info': html=viewAdminInfo(); break;
       case 'admin-blog': html=viewAdminBlog(); break;
       case 'feedback': html=viewFeedback(); break;
+      case 'healthcheck': html=viewHealthCheck(); break;
       case 'admin-feedback': html=viewAdminFeedback(); break;
       case 'admin-whatsapp': html=viewAdminWhatsapp(); break;
       default: html=viewHome();
