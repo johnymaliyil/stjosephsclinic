@@ -2843,7 +2843,12 @@ function viewAdminBilling(){
     <label style="margin-top:16px;display:block;">Services / other charges</label>
     ${extraRows}
     <button class="btn btn-outline btn-small" onclick="addBillExtraItem()">+ Add item</button>
-    <div class="field" style="max-width:220px;margin-top:16px;"><label>Consultation fee (₹)</label><input id="bf-consultation" type="number" min="0" step="0.01" value="${escapeHtml(f.consultationFee)}" onchange="state.billForm.consultationFee=this.value; render();"></div>
+    <div class="field" style="max-width:320px;margin-top:16px;"><label>Consultation fee (₹)</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="bf-consultation" type="number" min="0" step="0.01" value="${escapeHtml(f.consultationFee)}" onchange="state.billForm.consultationFee=this.value; render();">
+        ${Number(f.consultationFee)>0?`<button type="button" class="btn btn-outline btn-small" onclick="state.billForm.consultationFee=0; render();">Remove</button>`:''}
+      </div>
+    </div>
     <div class="field" style="max-width:280px;">
       <label>Payment method</label>
       <div style="display:flex;gap:16px;padding-top:4px;">
