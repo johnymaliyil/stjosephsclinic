@@ -568,6 +568,7 @@ let state = {
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
+  labRecordPrefillVisit:null,
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
@@ -1516,6 +1517,12 @@ window.billVisit = function(visitId){
   state.billingPrefillVisit = v;
   setView('admin-billing');
 };
+window.billVisitLabTest = function(visitId){
+  const v = state.data.visits.find(x=>x.id===visitId);
+  if(!v) return;
+  state.labRecordPrefillVisit = v;
+  setView('admin-labtests');
+};
 function money(n){ return '₹'+(Number(n)||0).toFixed(2); }
 function printBill(b){
   const i = state.data.info;
@@ -2143,7 +2150,15 @@ window.setView = async function(v){
   if(v==='admin-dashboard') await loadDashboardStats();
   if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
   if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
-  if(v==='admin-labtests'){ resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true); }
+  if(v==='admin-labtests'){
+    resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
+    if(state.labRecordPrefillVisit){
+      const pv = state.labRecordPrefillVisit;
+      state.labRecordForm.selectedPatient = { id:pv.patientId, name:pv.patientName, opdNo:pv.patientOpdNo, phone:pv.patientPhone };
+      state.labRecordPrefillVisit = null;
+      state.showLabRecordForm = true;
+    }
+  }
   if(v==='admin-billing'){
     state.billsSearchTerm=''; lastVisibleBillDoc=null;
     await Promise.all([loadBillsPage(true), loadMedicines()]);
@@ -2710,6 +2725,7 @@ function viewAdminVisits(){
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
+      <button class="btn btn-outline btn-small" onclick="billVisitLabTest('${v.id}')">Lab Test</button>
       <button class="btn btn-outline btn-small" onclick="notifyDoctorVisit('${v.id}')">Notify Dr</button>
       <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
     </td>
