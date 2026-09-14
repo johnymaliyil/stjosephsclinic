@@ -580,12 +580,14 @@ let state = {
   backupExporting:'',
   whatsappCampaignsLoading:false, whatsappSending:false,
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], info:DEFAULT_INFO }
+  attendanceLoading:false, hasMoreAttendance:false,
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
 let lastVisibleBillDoc = null;
 let lastVisibleLabRecordDoc = null;
+let lastVisibleAttendanceDoc = null;
 
 /* ---------- clinic info ---------- */
 const infoRef = doc(db,'clinicInfo','main');
@@ -1639,6 +1641,34 @@ async function loadLabRecordsPage(reset){
 }
 window.setLabRecordsSearchTerm = function(v){ state.labRecordsSearchTerm=v; lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); };
 window.loadMoreLabRecords = function(){ loadLabRecordsPage(false); };
+async function loadAttendancePage(reset){
+  state.attendanceLoading = true; render();
+  try{
+    const q = reset || !lastVisibleAttendanceDoc
+      ? query(collection(db,'attendance'), orderBy('createdAtMillis','desc'), limit(50))
+      : query(collection(db,'attendance'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleAttendanceDoc), limit(50));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.attendance = reset ? docs : state.data.attendance.concat(docs);
+    lastVisibleAttendanceDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleAttendanceDoc;
+    state.hasMoreAttendance = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load attendance — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.attendanceLoading = false; render();
+}
+window.loadMoreAttendance = function(){ loadAttendancePage(false); };
+window.deleteAttendance = async function(id){
+  if(!confirm('Delete this attendance record? This cannot be undone.')) return;
+  try{ await deleteDoc(doc(db,'attendance',id)); }catch(e){ console.error(e); showToast('Could not delete attendance record.'); return; }
+  lastVisibleAttendanceDoc=null; await loadAttendancePage(true);
+};
+function formatAttendanceDuration(ms){
+  const totalMin = Math.round(ms/60000);
+  const h = Math.floor(totalMin/60), m = totalMin%60;
+  return h>0 ? `${h}h ${m}m` : `${m}m`;
+}
 function resetLabRecordForm(){
   state.editingLabRecord = null;
   state.showLabRecordForm = false;
@@ -2046,6 +2076,7 @@ window.tryAdminLogin = async function(){
     await signInWithEmailAndPassword(auth, email, pass);
     state.loginError='';
     if('Notification' in window && Notification.permission==='default'){ Notification.requestPermission().catch(()=>{}); }
+    await recordStaffLogin(email);
     setView('admin-dashboard');
   }catch(e){
     state.loginError = 'Login failed — check the username and password.';
@@ -2053,10 +2084,35 @@ window.tryAdminLogin = async function(){
   }
 };
 window.adminLogout = async function(){
+  await recordStaffLogout();
   await signOut(auth);
   try{ localStorage.removeItem('lastAdminView'); }catch(e){}
   setView('home');
 };
+async function recordStaffLogin(staffEmail){
+  try{
+    const staffName = (staffEmail||'').split('@')[0] || 'staff';
+    const now = new Date();
+    const ref = await addDoc(collection(db,'attendance'), {
+      staffEmail: staffEmail||'', staffName,
+      date: todayISO(),
+      loginAt: now.toISOString(), loginAtMillis: now.getTime(),
+      logoutAt: null, logoutAtMillis: null,
+      createdAtMillis: now.getTime()
+    });
+    try{ localStorage.setItem('currentAttendanceId', ref.id); }catch(e){}
+  }catch(e){ console.error('Could not record staff login', e); }
+}
+async function recordStaffLogout(){
+  let id = null;
+  try{ id = localStorage.getItem('currentAttendanceId'); }catch(e){}
+  if(!id) return;
+  try{
+    const now = new Date();
+    await updateDoc(doc(db,'attendance',id), { logoutAt: now.toISOString(), logoutAtMillis: now.getTime() });
+  }catch(e){ console.error('Could not record staff logout', e); }
+  try{ localStorage.removeItem('currentAttendanceId'); }catch(e){}
+}
 onAuthStateChanged(auth, (user)=>{
   state.isAdmin = !!user;
   if(user){ startStaffReminders(); } else { stopStaffReminders(); }
@@ -2212,6 +2268,7 @@ window.setView = async function(v){
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
   if(v==='admin-whatsapp') await loadWhatsappCampaigns();
+  if(v==='admin-attendance'){ lastVisibleAttendanceDoc=null; await loadAttendancePage(true); }
   if(v==='healthcheck'){
     state.healthCheckForm = { age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }; state.healthCheckResult = null;
   }
@@ -2547,7 +2604,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-labtests','Lab Tests'],['admin-reports','Reports'],
-    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -3239,6 +3296,29 @@ function viewAdminWhatsapp(){
     </div>
   `);
 }
+function viewAdminAttendance(){
+  const rows = state.data.attendance.map(a=>{
+    const duration = (a.loginAtMillis && a.logoutAtMillis) ? formatAttendanceDuration(a.logoutAtMillis - a.loginAtMillis) : '—';
+    return `<tr>
+      <td class="mono">${escapeHtml(a.date||'')}</td>
+      <td>${escapeHtml(a.staffName||a.staffEmail||'')}</td>
+      <td class="mono">${a.loginAt?escapeHtml(new Date(a.loginAt).toLocaleTimeString()):'—'}</td>
+      <td class="mono">${a.logoutAt?escapeHtml(new Date(a.logoutAt).toLocaleTimeString()):'—'}</td>
+      <td class="mono">${duration}</td>
+      <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteAttendance('${a.id}')">Delete</button></td>
+    </tr>`;
+  }).join('');
+  return adminShell(`
+    <h2 class="display">Staff Attendance</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Recorded automatically each time someone logs in or out of the staff admin.</p>
+    <div class="table-wrap">
+      ${state.attendanceLoading? loadingSkeleton(6) :
+        rows? `<table><thead><tr><th>Date</th><th>Staff</th><th>Login</th><th>Logout</th><th>Duration</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">🕒</div>No attendance recorded yet.</div>`}
+    </div>
+    ${(!state.attendanceLoading && state.hasMoreAttendance) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreAttendance()">Load 50 more</button></div>` : ''}
+  `);
+}
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
   const items = [
@@ -3374,6 +3454,7 @@ function render(){
       case 'healthcheck': html=viewHealthCheck(); break;
       case 'admin-feedback': html=viewAdminFeedback(); break;
       case 'admin-whatsapp': html=viewAdminWhatsapp(); break;
+      case 'admin-attendance': html=viewAdminAttendance(); break;
       default: html=viewHome();
     }
   }
