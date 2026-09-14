@@ -2230,6 +2230,14 @@ function langToggleHtml(){
     <button class="${state.lang==='ml'?'active':''}" onclick="setLang('ml')">മല</button>
   </div>`;
 }
+function isStaffAccess(){
+  try{
+    if(new URLSearchParams(location.search).get('staff')==='1') return true;
+    if(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+    if(window.navigator.standalone===true) return true; // iOS home-screen PWA
+  }catch(e){}
+  return false;
+}
 function publicHeader(){
   const links=[['home',t('nav_home')],['about',t('nav_about')],['services',t('nav_services')],['blog',t('nav_blog')],['book',t('nav_book')],['feedback',t('nav_feedback')]];
   return `<header class="site"><div class="container nav-row">
@@ -2238,7 +2246,7 @@ function publicHeader(){
       ${links.map(([v,l])=>`<button class="nav-page-btn ${state.view===v?'active':''}" onclick="setView('${v}')">${l}</button>`).join('')}
       ${langToggleHtml()}
       ${state.showInstallButton?`<button class="btn btn-accent btn-small" style="margin-left:6px;" onclick="installApp()">${t('nav_install_app')}</button>`:''}
-      <button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">${t('nav_staff_login')}</button>
+      ${isStaffAccess()?`<button class="btn btn-outline btn-small" style="margin-left:6px;" onclick="setView('admin-login')">${t('nav_staff_login')}</button>`:''}
     </nav>
   </div>${state.showIosInstallHint?`<div class="container"><div class="top-alert" style="margin:0 0 14px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>St Joseph's Children's & Diabetic Clinic</title>
+</head>
+<body>
+<script>
+  // GitHub Pages serves this file for any unmatched path. Give "/staff" a
+  // friendly redirect to the staff-login flag on the real app; anything
+  // else just goes home.
+  var path = location.pathname.replace(/\/+$/, '');
+  if (path === '/staff') {
+    location.replace('/?staff=1' + location.hash);
+  } else {
+    location.replace('/');
+  }
+</script>
+</body>
+</html>
