@@ -1323,7 +1323,19 @@ window.loadMoreBills = function(){ loadBillsPage(false); };
 
 function resetBillForm(){
   state.showBillForm = false;
-  state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash', registrationFeePatientId:null };
+  state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash', registrationFeePatientId:null, consultationFeeNote:null };
+}
+async function loadLastPaidConsultation(patientId){
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'bills'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    const bills = snap.docs.map(d=>d.data())
+      .filter(b=>Number(b.consultationFee)>0 && b.date)
+      .sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+    return bills[0] || null;
+  }catch(e){ console.error('Could not check last paid consultation fee', e); return null; }
 }
 window.setBillVisitSearchField = function(field){
   state.billForm.visitSearchField = field;
@@ -1362,6 +1374,8 @@ async function selectBillVisitObject(v){
   state.billForm.medItems = medItemsFromVisit(v);
   state.billForm.extraItems = [{description:'',amount:''}];
   state.billForm.registrationFeePatientId = null;
+  state.billForm.consultationFee = 200;
+  state.billForm.consultationFeeNote = null;
   if(v.patientId){
     try{
       const snap = await getDoc(doc(db,'patients',v.patientId));
@@ -1370,6 +1384,21 @@ async function selectBillVisitObject(v){
         state.billForm.registrationFeePatientId = v.patientId;
       }
     }catch(e){ console.error('Could not check registration fee status', e); }
+    // The ₹200 consultation fee covers 30 days -- if this patient already paid it
+    // recently, ask rather than silently charging (or silently waiving) it again.
+    const lastBill = await loadLastPaidConsultation(v.patientId);
+    if(lastBill){
+      const visitDate = new Date((v.date||todayISO())+'T00:00:00');
+      const lastDate = new Date(lastBill.date+'T00:00:00');
+      const daysSince = Math.round((visitDate - lastDate) / 86400000);
+      if(daysSince >= 0 && daysSince < 30){
+        const addAgain = confirm(`This patient's ₹200 consultation fee was already paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago) — it's valid for 30 days.\n\nAdd the consultation fee again for this bill anyway?`);
+        state.billForm.consultationFee = addAgain ? 200 : 0;
+        state.billForm.consultationFeeNote = addAgain
+          ? `Charged again by choice — last paid ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago).`
+          : `Waived — already paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago), within the 30-day validity.`;
+      }
+    }
   }
 }
 window.clearBillVisit = function(){ state.billForm.selectedVisit = null; state.billForm.medItems = []; render(); };
@@ -2862,6 +2891,7 @@ function viewAdminBilling(){
         <input id="bf-consultation" type="number" min="0" step="0.01" value="${escapeHtml(f.consultationFee)}" onchange="state.billForm.consultationFee=this.value; render();">
         ${Number(f.consultationFee)>0?`<button type="button" class="btn btn-outline btn-small" onclick="state.billForm.consultationFee=0; render();">Remove</button>`:''}
       </div>
+      ${f.consultationFeeNote?`<p style="color:var(--text-muted);font-size:12px;margin:6px 0 0;">${escapeHtml(f.consultationFeeNote)}</p>`:''}
     </div>
     <div class="field" style="max-width:280px;">
       <label>Payment method</label>
