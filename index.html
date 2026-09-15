@@ -589,6 +589,18 @@ let lastVisibleVisitDoc = null;
 let lastVisibleBillDoc = null;
 let lastVisibleLabRecordDoc = null;
 let lastVisibleAttendanceDoc = null;
+let viewHistory = [];
+let skipNextHistoryPush = false;
+function pushViewHistory(){
+  if(skipNextHistoryPush){ skipNextHistoryPush = false; return; }
+  if(state.view && state.view.startsWith('admin-')) viewHistory.push(state.view);
+}
+window.goBackView = function(){
+  const prev = viewHistory.pop();
+  if(!prev){ showToast('Nothing to go back to.'); return; }
+  skipNextHistoryPush = true;
+  setView(prev);
+};
 
 /* ---------- clinic info ---------- */
 const infoRef = doc(db,'clinicInfo','main');
@@ -1029,6 +1041,7 @@ window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; lastVisibleV
 window.loadMoreVisits = function(){ loadVisitsPage(false); };
 window.viewPatientVisits = async function(patientId){
   const patient = state.data.patients.find(p=>p.id===patientId);
+  pushViewHistory();
   state.view='admin-visits'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
   resetBillForm();
@@ -1356,6 +1369,7 @@ window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; lastVisibleBil
 window.loadMoreBills = function(){ loadBillsPage(false); };
 window.viewPatientBills = async function(patientId){
   const patient = state.data.patients.find(p=>p.id===patientId);
+  pushViewHistory();
   state.view='admin-billing'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
   resetBillForm();
@@ -2198,6 +2212,8 @@ window.adminLogout = async function(){
   await recordStaffLogout();
   await signOut(auth);
   try{ localStorage.removeItem('lastAdminView'); }catch(e){}
+  viewHistory = [];
+  skipNextHistoryPush = true;
   setView('home');
 };
 async function recordStaffLogin(staffEmail){
@@ -2350,6 +2366,7 @@ async function loadFollowUpsDue(){
 /* ---------- toast / router ---------- */
 function showToast(msg, type){ state.toast=msg; state.toastType=type||'info'; render(); setTimeout(()=>{ state.toast=''; render(); }, 3000); }
 window.setView = async function(v){
+  pushViewHistory();
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
   resetBillForm();
@@ -2730,7 +2747,7 @@ function adminShell(content){
       <button class="admin-side-extra" onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>
       <button class="admin-side-extra" onclick="adminLogout()" style="color:#E2A08C;">Log out</button>
     </div>
-    <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${content}</div>
+    <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${viewHistory.length?`<button class="btn btn-outline btn-small" style="margin-bottom:14px;" onclick="goBackView()">← Back</button>`:''}${content}</div>
   </div>`;
 }
 function lowStockAlertHtml(items){
