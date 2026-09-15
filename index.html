@@ -585,9 +585,10 @@ let state = {
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
   attendanceLoading:false, hasMoreAttendance:false,
   purchasesLoading:false, hasMorePurchases:false, showPurchaseForm:false, editingPurchase:null,
+  unpaidPurchasesLoading:false,
   purchaseForm:{ distributorName:'', invoiceNumber:'', date:todayISO(), paymentStatus:'unpaid', notes:'',
     items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] },
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], info:DEFAULT_INFO }
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
@@ -873,6 +874,21 @@ async function loadPurchasesPage(reset){
   state.purchasesLoading = false; render();
 }
 window.loadMorePurchases = function(){ loadPurchasesPage(false); };
+async function loadUnpaidPurchases(){
+  state.unpaidPurchasesLoading = true; render();
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits. Not paginated: this is meant
+    // to surface everything currently owed, not just the most recent page.
+    const q = query(collection(db,'purchases'), where('paymentStatus','==','unpaid'));
+    const snap = await getDocs(q);
+    state.data.unpaidPurchases = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+  }catch(e){
+    console.error(e);
+    state.data.unpaidPurchases = [];
+  }
+  state.unpaidPurchasesLoading = false; render();
+}
 function resetPurchaseForm(){
   state.showPurchaseForm = false;
   state.editingPurchase = null;
@@ -950,14 +966,15 @@ window.savePurchaseForm = async function(){
   showToast('👍 Purchase recorded and inventory updated!', 'success'); render();
 };
 window.togglePurchasePayment = async function(id){
-  const p = state.data.purchases.find(x=>x.id===id);
+  const p = state.data.purchases.find(x=>x.id===id) || state.data.unpaidPurchases.find(x=>x.id===id);
   if(!p) return;
   const newStatus = p.paymentStatus==='paid' ? 'unpaid' : 'paid';
   try{ await updateDoc(doc(db,'purchases',id), {paymentStatus:newStatus}); }catch(e){ console.error(e); showToast('Could not update payment status.'); return; }
-  p.paymentStatus = newStatus; render();
+  p.paymentStatus = newStatus;
+  await loadUnpaidPurchases(); render();
 };
 window.deletePurchase = async function(id){
-  const p = state.data.purchases.find(x=>x.id===id);
+  const p = state.data.purchases.find(x=>x.id===id) || state.data.unpaidPurchases.find(x=>x.id===id);
   if(!p) return;
   if(!confirm('Delete this purchase record? The stock added by it will be deducted back from inventory.')) return;
   const batch = writeBatch(db);
@@ -966,7 +983,7 @@ window.deletePurchase = async function(id){
   try{
     await batch.commit();
   }catch(e){ console.error(e); showToast('Could not delete purchase.'); return; }
-  lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]);
+  lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]);
 };
 
 /* ---------- appointments ---------- */
@@ -2312,6 +2329,21 @@ window.exportLabRecords = function(){
     {label:'Phone', value:'patientPhone'}, {label:'Details', value:'details'}, {label:'Amount', value:'amount'}
   ], 'lab-tests');
 };
+window.exportAttendance = function(){
+  runExport('Staff attendance', 'attendance', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Staff', value:a=>a.staffName||a.staffEmail||''},
+    {label:'Login At', value:a=>formatIST(a.loginAt)}, {label:'Logout At', value:a=>formatIST(a.logoutAt)},
+    {label:'Duration', value:a=>(a.loginAtMillis && a.logoutAtMillis) ? formatAttendanceDuration(a.logoutAtMillis-a.loginAtMillis) : ''}
+  ], 'staff-attendance');
+};
+window.exportPurchases = function(){
+  runExport('Medicine purchases', 'purchases', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Distributor', value:'distributorName'}, {label:'Invoice No.', value:'invoiceNumber'},
+    {label:'Medicines', value:p=>(p.items||[]).map(i=>`${i.name} x${i.quantity} @₹${i.purchasePrice}`).join('; ')},
+    {label:'Total Amount', value:'totalAmount'}, {label:'Payment Status', value:p=>p.paymentStatus==='paid'?'Paid':'Unpaid'},
+    {label:'Notes', value:'notes'}
+  ], 'medicine-purchases');
+};
 
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
@@ -2514,7 +2546,7 @@ window.setView = async function(v){
   }
   if(v==='admin-reports') await reloadCurrentReportTab();
   if(v==='admin-inventory') await loadMedicines();
-  if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]); }
+  if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]); }
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
   if(v==='admin-whatsapp') await loadWhatsappCampaigns();
@@ -3565,9 +3597,23 @@ function viewAdminPurchases(){
       <button class="btn btn-danger btn-small" onclick="deletePurchase('${p.id}')">Delete</button>
     </td>
   </tr>`).join('');
+  const unpaid = state.data.unpaidPurchases;
+  const unpaidTotal = unpaid.reduce((s,p)=>s+(Number(p.totalAmount)||0), 0);
+  const unpaidRows = unpaid.map(p=>`<tr>
+    <td class="mono">${escapeHtml(p.date||'')}</td>
+    <td>${escapeHtml(p.distributorName||'')}</td>
+    <td class="mono">${escapeHtml(p.invoiceNumber||'—')}</td>
+    <td class="mono">₹${(Number(p.totalAmount)||0).toFixed(2)}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="togglePurchasePayment('${p.id}')">Mark paid</button></td>
+  </tr>`).join('');
+  const unpaidCard = `<div class="card" style="margin-bottom:20px;${unpaid.length?'border-left:4px solid var(--danger,#c0392b);':''}">
+    <h3 style="margin-top:0;">${unpaid.length?`⚠️ ₹${unpaidTotal.toFixed(2)} owed across ${unpaid.length} purchase${unpaid.length>1?'s':''}`:'✅ Nothing owed to distributors'}</h3>
+    ${state.unpaidPurchasesLoading ? loadingSkeleton(2) : unpaidRows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Distributor</th><th>Invoice</th><th>Amount</th><th></th></tr></thead><tbody>${unpaidRows}</tbody></table></div>` : ''}
+  </div>`;
   return adminShell(`
     <h2 class="display">Medicine Purchases</h2>
     <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Record goods received from medical distributors — inventory is updated automatically when you save.</p>
+    ${unpaidCard}
     ${formCard}
     <div class="table-wrap">
       ${state.purchasesLoading? loadingSkeleton(6) :
@@ -3676,6 +3722,8 @@ function viewAdminBackup(){
     {key:'exportLabRecords', label:'Lab tests', icon:'🧪', title:'Lab Tests', desc:'Every lab test recorded: date, patient, test details and amount.'},
     {key:'exportBills', label:'Bills', icon:'🧾', title:'Billing', desc:'Every bill: bill number, patient, medicine/service/consultation totals, grand total and payment method.'},
     {key:'exportMedicines', label:'Medicine inventory', icon:'💊', title:'Medicine Inventory', desc:'Current stock list: name, batch, expiry, quantity, unit, reorder level and price.'},
+    {key:'exportPurchases', label:'Medicine purchases', icon:'📦', title:'Medicine Purchases', desc:'Every purchase from a distributor: date, invoice number, medicines received, purchase price, total and payment status.'},
+    {key:'exportAttendance', label:'Staff attendance', icon:'🕒', title:'Staff Attendance', desc:'Every login/logout and manual check-in/check-out: staff, date, time (IST) and duration.'},
     {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'},
     {key:'exportFeedback', label:'Feedback', icon:'💬', title:'Feedback', desc:'All feedback submitted from the website, with rating.'}
   ];
