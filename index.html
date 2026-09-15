@@ -1584,6 +1584,62 @@ window.printPrescription = function(visitId){
   w.focus();
   setTimeout(()=>w.print(), 300);
 };
+window.printPatientHistory = async function(patientId){
+  let patient = null;
+  try{
+    const snap = await getDoc(doc(db,'patients',patientId));
+    if(snap.exists()) patient = { id:snap.id, ...snap.data() };
+  }catch(e){ console.error('Could not load patient for print', e); }
+  if(!patient){ showToast('Could not load this patient.'); return; }
+  let visits = [];
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'visits'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    visits = snap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
+  }catch(e){ console.error('Could not load visits for print', e); showToast('Could not load visit history.'); return; }
+  const i = state.data.info;
+  const visitRows = visits.map(v=>{
+    const meds = (v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.dosage?` — ${escapeHtml(m.dosage)}`:''}${m.source==='outside'?' (to order)':''}`).join('<br>');
+    return `<div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #E1D9C5;">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <strong>${escapeHtml(v.date||'')}</strong>
+        <span class="muted">${escapeHtml(v.doctorName||'')}</span>
+      </div>
+      ${v.reason?`<div style="margin-top:4px;"><span class="muted">Reason:</span> ${escapeHtml(v.reason)}</div>`:''}
+      ${vitalsSummary(v)?`<div style="margin-top:4px;"><span class="muted">Vitals:</span> ${escapeHtml(vitalsSummary(v))}</div>`:''}
+      ${meds?`<div style="margin-top:6px;"><span class="muted">Medicines:</span><div style="margin-top:2px;">${meds}</div></div>`:'<div style="margin-top:6px;color:#8A8272;font-size:13px;">No medicines prescribed.</div>'}
+    </div>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient History — ${escapeHtml(patient.name)}</title>
+  <style>
+    body{font-family:Georgia,'Times New Roman',serif;color:#262420;max-width:720px;margin:32px auto;padding:0 20px;}
+    h1{font-size:20px;margin:0 0 2px;}
+    h2{font-size:16px;}
+    .muted{color:#736F64;font-size:13px;}
+    .row{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1F4A42;padding-bottom:14px;margin-bottom:14px;}
+    @media print{ body{margin:0;} }
+  </style></head><body>
+  <div class="row">
+    <div><h1>${escapeHtml(i.clinicName)}</h1><div class="muted">${escapeHtml(i.address)}<br>${escapeHtml(i.phone)}</div></div>
+    <div style="text-align:right;"><div class="muted">PRINTED</div><strong>${escapeHtml(todayISO())}</strong></div>
+  </div>
+  <div style="margin-bottom:18px;">
+    <div class="muted">PATIENT</div>
+    <strong style="font-size:16px;">${escapeHtml(patient.name)}</strong> &middot; OPD ${escapeHtml(patient.opdNo||'')}<br>
+    ${[patient.age?`Age ${escapeHtml(String(patient.age))}`:'', patient.dob?`DOB ${escapeHtml(patient.dob)}`:'', patient.gender||'', patient.phone||''].filter(Boolean).join(' &middot; ')}
+  </div>
+  <h2 style="border-bottom:1px solid #1F4A42;padding-bottom:6px;">Visit history (${visits.length})</h2>
+  ${visitRows || '<p class="muted">No visits recorded yet.</p>'}
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to print this history.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 300);
+};
 
 /* ---------- billing ---------- */
 async function loadBillsPage(reset){
@@ -3510,7 +3566,10 @@ function viewAdminVisits(){
     ${formCard}
     ${state.visitsPatientFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div>Showing all visits for <strong>${escapeHtml(state.visitsPatientFilter.name)}</strong></div>
-      <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
+      <div class="row-actions">
+        <button class="btn btn-outline btn-small" onclick="printPatientHistory('${state.visitsPatientFilter.id}')">🖨️ Print full history</button>
+        <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
+      </div>
     </div>` : `<div class="search-row" style="margin-bottom:16px;">
       <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)">
     </div>`}
