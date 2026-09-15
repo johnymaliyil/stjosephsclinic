@@ -507,6 +507,7 @@ window.setLang = function(lang){
   render();
 };
 
+const STAFF_NAMES = ['Sheena', 'Danny'];
 const DEFAULT_INFO = {
   clinicName: "St Joseph's Children's & Diabetic Clinic",
   tagline: "Caring for children and families managing diabetes.",
@@ -1736,6 +1737,49 @@ function formatAttendanceDuration(ms){
   const h = Math.floor(totalMin/60), m = totalMin%60;
   return h>0 ? `${h}h ${m}m` : `${m}m`;
 }
+function formatIST(iso){
+  if(!iso) return '—';
+  try{
+    return new Date(iso).toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit' });
+  }catch(e){ return '—'; }
+}
+async function findOpenAttendance(staffName){
+  const q = query(collection(db,'attendance'), where('staffName','==',staffName));
+  const snap = await getDocs(q);
+  const records = snap.docs.map(d=>({id:d.id,...d.data()}))
+    .filter(a=>!a.logoutAt)
+    .sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+  return records[0] || null;
+}
+window.staffCheckIn = async function(staffName){
+  try{
+    const open = await findOpenAttendance(staffName);
+    if(open){ showToast(`${staffName} is already checked in (since ${formatIST(open.loginAt)} IST).`); return; }
+  }catch(e){ console.error('Could not check existing attendance', e); }
+  const now = new Date();
+  try{
+    await addDoc(collection(db,'attendance'), {
+      staffName, staffEmail:'',
+      date: todayISO(),
+      loginAt: now.toISOString(), loginAtMillis: now.getTime(),
+      logoutAt: null, logoutAtMillis: null,
+      createdAtMillis: now.getTime()
+    });
+    showToast(`${staffName} checked in at ${formatIST(now.toISOString())} IST.`, 'success');
+  }catch(e){ console.error('Could not record check-in', e); showToast('Could not record check-in.'); return; }
+  lastVisibleAttendanceDoc = null; await loadAttendancePage(true);
+};
+window.staffCheckOut = async function(staffName){
+  let open = null;
+  try{ open = await findOpenAttendance(staffName); }catch(e){ console.error('Could not find open attendance record', e); }
+  if(!open){ showToast(`No open check-in found for ${staffName}.`); return; }
+  const now = new Date();
+  try{
+    await updateDoc(doc(db,'attendance',open.id), { logoutAt: now.toISOString(), logoutAtMillis: now.getTime() });
+    showToast(`${staffName} checked out at ${formatIST(now.toISOString())} IST.`, 'success');
+  }catch(e){ console.error('Could not record check-out', e); showToast('Could not record check-out.'); return; }
+  lastVisibleAttendanceDoc = null; await loadAttendancePage(true);
+};
 function resetLabRecordForm(){
   state.editingLabRecord = null;
   state.showLabRecordForm = false;
@@ -3370,20 +3414,29 @@ function viewAdminWhatsapp(){
   `);
 }
 function viewAdminAttendance(){
+  const checkInOutCard = `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">Check in / Check out</h3>
+    ${STAFF_NAMES.map(name=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <strong style="min-width:80px;">${escapeHtml(name)}</strong>
+      <button class="btn btn-primary btn-small" onclick="staffCheckIn('${name}')">Check In</button>
+      <button class="btn btn-outline btn-small" onclick="staffCheckOut('${name}')">Check Out</button>
+    </div>`).join('')}
+  </div>`;
   const rows = state.data.attendance.map(a=>{
     const duration = (a.loginAtMillis && a.logoutAtMillis) ? formatAttendanceDuration(a.logoutAtMillis - a.loginAtMillis) : '—';
     return `<tr>
       <td class="mono">${escapeHtml(a.date||'')}</td>
       <td>${escapeHtml(a.staffName||a.staffEmail||'')}</td>
-      <td class="mono">${a.loginAt?escapeHtml(new Date(a.loginAt).toLocaleTimeString()):'—'}</td>
-      <td class="mono">${a.logoutAt?escapeHtml(new Date(a.logoutAt).toLocaleTimeString()):'—'}</td>
+      <td class="mono">${formatIST(a.loginAt)}</td>
+      <td class="mono">${formatIST(a.logoutAt)}</td>
       <td class="mono">${duration}</td>
       <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteAttendance('${a.id}')">Delete</button></td>
     </tr>`;
   }).join('');
   return adminShell(`
     <h2 class="display">Staff Attendance</h2>
-    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Recorded automatically each time someone logs in or out of the staff admin.</p>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Check in/out times are recorded in Indian Standard Time. Logging into or out of the staff admin also records a login/logout automatically.</p>
+    ${checkInOutCard}
     <div class="table-wrap">
       ${state.attendanceLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>Date</th><th>Staff</th><th>Login</th><th>Logout</th><th>Duration</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
