@@ -102,6 +102,8 @@
   .stat-card .label{font-size:12px;color:var(--text-muted);text-transform:uppercase;}
   .report-amount{cursor:pointer;border-bottom:1px dashed var(--border);padding-bottom:1px;}
   .report-amount:hover{color:var(--primary);border-bottom-color:var(--primary);}
+  .report-row-clickable{cursor:pointer;}
+  .report-row-clickable:hover{background:var(--surface-soft);}
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;}
@@ -3128,12 +3130,12 @@ function reportDetailHeader(label){
 function reportTabCollections(){
   const totals = reportTotals(state.reportBills);
   const byDay = reportByDay(state.reportBills);
-  const dayRows = byDay.map(d=>`<tr>
+  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono">${d.count}</td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','cash','Cash bills on ${escapeHtml(d.date)}')">₹${d.cash.toFixed(2)}</span></td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','upi','UPI bills on ${escapeHtml(d.date)}')">₹${d.upi.toFixed(2)}</span></td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">₹${d.total.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}','cash','Cash bills on ${escapeHtml(d.date)}')">₹${d.cash.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}','upi','UPI bills on ${escapeHtml(d.date)}')">₹${d.upi.toFixed(2)}</span></td>
+    <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">₹${d.total.toFixed(2)}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
     const bills = filteredReportBills();
