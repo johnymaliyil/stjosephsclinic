@@ -2913,6 +2913,26 @@ function viewFeedback(){
     <button class="btn btn-primary" onclick="submitFeedback()">${t('btn_submit_feedback')}</button>
   </div></section></div>${publicFooter()}`;
 }
+function pediatricWeightRangeKg(age){
+  if(age<1 || age>17) return null;
+  let mid;
+  if(age<=6) mid = (age*2)+8;
+  else if(age<=12) mid = (age*7-5)/2;
+  else mid = (age*3.5)+10; // rough teen approximation
+  const spread = mid*0.15;
+  return { low: Math.round((mid-spread)*10)/10, high: Math.round((mid+spread)*10)/10 };
+}
+function pediatricHeightRangeCm(age){
+  if(age<2 || age>12) return null;
+  const mid = (age*6)+77;
+  return { low: Math.round(mid-4), high: Math.round(mid+4) };
+}
+function adultIdealWeightRangeKg(heightCm){
+  const h = Number(heightCm)/100;
+  if(!h || h<=0) return null;
+  // Same 18.5-23 "normal" BMI band used by the Health Check tool.
+  return { low: Math.round(18.5*h*h*10)/10, high: Math.round(23*h*h*10)/10 };
+}
 function healthCheckRecommendations(f){
   const age = Number(f.age)||0;
   const heightM = Number(f.height)/100;
@@ -3151,6 +3171,20 @@ function viewAdminPatients(){
 }
 function viewAdminVisits(){
   const f = state.visitForm;
+  const patientAge = f.selectedPatient ? Number(f.selectedPatient.age) : NaN;
+  let weightHint = '', heightHint = '';
+  if(!isNaN(patientAge) && patientAge>0){
+    if(patientAge < 18){
+      const wr = pediatricWeightRangeKg(patientAge);
+      if(wr) weightHint = `Typical for age ${patientAge}: ~${wr.low}–${wr.high} kg`;
+      const hr = pediatricHeightRangeCm(patientAge);
+      if(hr) heightHint = `Typical for age ${patientAge}: ~${hr.low}–${hr.high} cm`;
+    }else{
+      const lastHeight = f.lastVitals && f.lastVitals.height;
+      const wr = lastHeight ? adultIdealWeightRangeKg(lastHeight) : null;
+      if(wr) weightHint = `Healthy range for last recorded height (${lastHeight} cm): ~${wr.low}–${wr.high} kg`;
+    }
+  }
   const patientBlock = f.selectedPatient
     ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <div><strong>${escapeHtml(f.selectedPatient.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedPatient.opdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(f.selectedPatient.phone||'')}</span></div>
@@ -3213,14 +3247,19 @@ function viewAdminVisits(){
         f.lastVitals.sugarValue?`Sugar ${escapeHtml(f.lastVitals.sugarValue)} mg/dL (${escapeHtml(f.lastVitals.sugarType||'')})`:''
       ].filter(Boolean).join(' · ')}</p>` : ''}
     <div class="form-grid">
-      <div class="field"><label>Weight (kg)</label><input id="vf-weight" type="number" min="0" step="0.1" value="${escapeHtml(f.weight)}"></div>
-      <div class="field"><label>Height (cm)</label><input id="vf-height" type="number" min="0" step="0.1" value="${escapeHtml(f.height)}"></div>
+      <div class="field"><label>Weight (kg)</label><input id="vf-weight" type="number" min="0" step="0.1" value="${escapeHtml(f.weight)}">
+        ${weightHint?`<p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">${escapeHtml(weightHint)}</p>`:''}
+      </div>
+      <div class="field"><label>Height (cm)</label><input id="vf-height" type="number" min="0" step="0.1" value="${escapeHtml(f.height)}">
+        ${heightHint?`<p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">${escapeHtml(heightHint)}</p>`:''}
+      </div>
       <div class="field"><label>Blood pressure</label><input id="vf-bp" type="text" placeholder="e.g. 120/80" value="${escapeHtml(f.bp)}"></div>
       <div class="field" style="grid-column:1/-1;max-width:340px;"><label>Blood sugar (mg/dL)</label>
         <div style="display:flex;gap:6px;">
           <input id="vf-sugar-value" type="number" min="0" value="${escapeHtml(f.sugarValue)}" style="flex:1;">
           <select id="vf-sugar-type" style="flex:1;">${['Fasting','PP','Random'].map(t=>`<option value="${t}" ${f.sugarType===t?'selected':''}>${t}</option>`).join('')}</select>
         </div>
+        <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Normal ranges: Fasting 70–100 · PP &lt;140 · Random &lt;200 mg/dL</p>
       </div>
     </div>
     <label>Prescribed medicines</label>
