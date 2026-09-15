@@ -2461,6 +2461,7 @@ function filteredReportBills(){
 }
 window.setReportDetailFilter = function(date, method, label){ state.reportDetailFilter = {date:date||null, method:method||null, label}; render(); };
 window.setReportMedicineFilter = function(medicineKey, label){ state.reportDetailFilter = {medicine:medicineKey, label}; render(); };
+window.setReportReasonFilter = function(reasonKey, label){ state.reportDetailFilter = {reason:reasonKey, label}; render(); };
 window.clearReportDetailFilter = function(){ state.reportDetailFilter = null; render(); };
 function reportTotals(bills){
   let cash=0, upi=0, medTotal=0, extraTotal=0, consultationTotal=0;
@@ -2515,7 +2516,8 @@ function filteredReportVisits(){
   if(!f) return [];
   return state.reportVisitsList.filter(v=>
     (!f.date || v.date===f.date) &&
-    (!f.method || (f.method==='billed' ? !!v.billId : !v.billId))
+    (!f.method || (f.method==='billed' ? !!v.billId : !v.billId)) &&
+    (!f.reason || (v.reason||'').trim().toLowerCase()===f.reason)
   ).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 }
 function filteredReportOutsideMeds(){
@@ -2545,6 +2547,17 @@ function visitsReportByDay(visits){
     if(v.billId) map[d].billed++;
   });
   return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function visitReasonBreakdown(visits, topN){
+  const counts = {};
+  visits.forEach(v=>{
+    const reason = (v.reason||'').trim();
+    if(!reason) return;
+    const key = reason.toLowerCase();
+    if(!counts[key]) counts[key] = { key, label:reason, count:0 };
+    counts[key].count++;
+  });
+  return Object.values(counts).sort((a,b)=>b.count-a.count).slice(0, topN||10);
 }
 function inventoryReportAggregates(visits){
   const dispensed = {};
@@ -3436,43 +3449,41 @@ window.sendExpiryAlert = function(){
   const msg = `Medicine expiry alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}${m.batch?` (batch ${m.batch})`:''}: ${expiryStatusText(m)}`).join('\n');
   window.open(waLinkWithText(target, msg), '_blank');
 };
-window.sendDailySummary = async function(){
+async function buildSummaryText(label, fromDate, toDate){
   const i = state.data.info;
-  const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
-  const today = todayISO();
-  let visitsTodayList = [], cashTotal = 0, upiTotal = 0;
+  const singleDay = fromDate===toDate;
+  let visitsList = [], cashTotal = 0, upiTotal = 0;
   try{
-    const visitSnap = await getDocs(query(collection(db,'visits'), where('date','==',today)));
-    visitsTodayList = visitSnap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
-  }catch(e){ console.error('Could not load today\'s visits for summary', e); }
-  const visitsToday = visitsTodayList.length;
+    const visitSnap = await getDocs(query(collection(db,'visits'), where('date','>=',fromDate), where('date','<=',toDate)));
+    visitsList = visitSnap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
+  }catch(e){ console.error('Could not load visits for summary', e); }
   try{
-    const billSnap = await getDocs(query(collection(db,'bills'), where('date','==',today)));
+    const billSnap = await getDocs(query(collection(db,'bills'), where('date','>=',fromDate), where('date','<=',toDate)));
     billSnap.docs.forEach(d=>{
       const b = d.data();
       const amt = Number(b.grandTotal)||0;
       if(b.paymentMethod==='upi') upiTotal += amt; else cashTotal += amt;
     });
-  }catch(e){ console.error('Could not load today\'s bills for summary', e); }
+  }catch(e){ console.error('Could not load bills for summary', e); }
   const meds = state.data.medicines;
   const lowStockCount = meds.filter(m=>medStatus(m).label==='Low stock').length;
   const expiringCount = meds.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label)).length;
   const vaccinationsDueCount = (state.vaccinationsDue||[]).length;
+  const rangeLabel = singleDay ? fromDate : `${fromDate} to ${toDate}`;
   const lines = [
-    `Daily summary — ${i.clinicName}, ${today}`,
+    `${label} — ${i.clinicName}, ${rangeLabel}`,
     ``,
-    `Patients seen today: ${visitsToday}`,
-    `Collections today: ${money(cashTotal+upiTotal)} (Cash ${money(cashTotal)}, UPI ${money(upiTotal)})`
+    `Patients seen: ${visitsList.length}`,
+    `Collections: ${money(cashTotal+upiTotal)} (Cash ${money(cashTotal)}, UPI ${money(upiTotal)})`
   ];
   if(lowStockCount) lines.push(`⚠️ ${lowStockCount} medicine${lowStockCount>1?'s':''} low on stock`);
   if(expiringCount) lines.push(`⏰ ${expiringCount} medicine${expiringCount>1?'s':''} expired/expiring soon`);
   if(vaccinationsDueCount) lines.push(`💉 ${vaccinationsDueCount} vaccination${vaccinationsDueCount>1?'s':''} due`);
-  if(visitsTodayList.length){
+  if(singleDay && visitsList.length){
     const MAX_VISITS = 20;
     const patientAges = {};
     try{
-      const patientIds = [...new Set(visitsTodayList.map(v=>v.patientId).filter(Boolean))];
+      const patientIds = [...new Set(visitsList.map(v=>v.patientId).filter(Boolean))];
       await Promise.all(patientIds.map(async pid=>{
         try{
           const snap = await getDoc(doc(db,'patients',pid));
@@ -3481,7 +3492,7 @@ window.sendDailySummary = async function(){
       }));
     }catch(e){ console.error('Could not load patient ages for summary', e); }
     lines.push('', 'Visit details:');
-    visitsTodayList.slice(0,MAX_VISITS).forEach(v=>{
+    visitsList.slice(0,MAX_VISITS).forEach(v=>{
       const age = patientAges[v.patientId];
       lines.push(`- ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}${age?`, Age ${age}`:''}) — ${v.reason||'No reason recorded'}`);
       if(v.medicines && v.medicines.length){
@@ -3490,11 +3501,44 @@ window.sendDailySummary = async function(){
         lines.push('  Meds: none recorded');
       }
     });
-    if(visitsTodayList.length > MAX_VISITS){
-      lines.push(`…and ${visitsTodayList.length-MAX_VISITS} more visit${visitsTodayList.length-MAX_VISITS===1?'':'s'}.`);
+    if(visitsList.length > MAX_VISITS){
+      lines.push(`…and ${visitsList.length-MAX_VISITS} more visit${visitsList.length-MAX_VISITS===1?'':'s'}.`);
+    }
+  }else if(!singleDay && visitsList.length){
+    const topReasons = visitReasonBreakdown(visitsList, 8);
+    if(topReasons.length){
+      lines.push('', 'Top visit reasons:');
+      topReasons.forEach(r=>lines.push(`- ${r.label}: ${r.count}`));
     }
   }
-  window.open(waLinkWithText(target, lines.join('\n')), '_blank');
+  return lines.join('\n');
+}
+window.sendDailySummary = async function(){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const today = todayISO();
+  const text = await buildSummaryText('Daily summary', today, today);
+  window.open(waLinkWithText(target, text), '_blank');
+};
+window.sendWeeklySummary = async function(){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const to = todayISO();
+  const fromDateObj = new Date(); fromDateObj.setDate(fromDateObj.getDate()-6);
+  const from = fromDateObj.toISOString().slice(0,10);
+  const text = await buildSummaryText('Weekly summary (last 7 days)', from, to);
+  window.open(waLinkWithText(target, text), '_blank');
+};
+window.sendMonthlySummary = async function(){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const from = monthStartISO();
+  const to = todayISO();
+  const text = await buildSummaryText('Monthly summary', from, to);
+  window.open(waLinkWithText(target, text), '_blank');
 };
 function tomorrowAppointmentsHtml(appts){
   return `<div class="card" style="margin-bottom:16px;">
@@ -3537,8 +3581,10 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
-    <div class="row-actions" style="margin-bottom:16px;">
-      <button class="btn btn-outline btn-small" onclick="sendDailySummary()">📋 Send today's summary via WhatsApp</button>
+    <div class="row-actions" style="margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-small" onclick="sendDailySummary()">📋 Send today's summary</button>
+      <button class="btn btn-outline btn-small" onclick="sendWeeklySummary()">📋 Send weekly summary</button>
+      <button class="btn btn-outline btn-small" onclick="sendMonthlySummary()">📋 Send monthly summary</button>
     </div>
     ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
     ${expiringMeds.length? expiringMedsAlertHtml(expiringMeds) : ''}
@@ -4027,6 +4073,15 @@ function reportTabPatients(){
 function reportTabVisits(){
   const totals = visitsReportTotals(state.reportVisitsList);
   const byDay = visitsReportByDay(state.reportVisitsList);
+  const topReasons = visitReasonBreakdown(state.reportVisitsList, 10);
+  const reasonRows = topReasons.map(r=>{
+    const safeKey = r.key.replace(/'/g,"\\'");
+    const safeLabel = r.label.replace(/'/g,"\\'");
+    return `<tr class="report-row-clickable" onclick="setReportReasonFilter('${safeKey}','Visits — ${safeLabel}')">
+      <td>${escapeHtml(r.label)}</td>
+      <td class="mono">${r.count}</td>
+    </tr>`;
+  }).join('');
   const dayRows = byDay.map(d=>`<tr>
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">${d.count}</span></td>
@@ -4053,6 +4108,12 @@ function reportTabVisits(){
       <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All visits')"><div class="num">${totals.count}</div><div class="label">Total visits</div></div>
       <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'billed','Billed visits')"><div class="num">${totals.billed}</div><div class="label">Billed</div></div>
       <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,'unbilled','Not yet billed')"><div class="num">${totals.unbilled}</div><div class="label">Not yet billed</div></div>
+    </div>
+    <div class="table-wrap">
+      <h3 style="margin-top:0;">Top visit reasons</h3>
+      ${state.visitsReportLoading? loadingSkeleton(5) :
+        topReasons.length ? `<table><thead><tr><th>Reason</th><th>Visits</th></tr></thead><tbody>${reasonRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No visit reasons recorded in this date range.</div>`}
     </div>
     <div class="table-wrap">
       ${state.visitsReportLoading? loadingSkeleton(5) :
