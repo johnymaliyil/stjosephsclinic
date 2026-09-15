@@ -1314,6 +1314,29 @@ window.clearVisitsPatientFilter = function(){
   lastVisibleVisitDoc = null;
   loadVisitsPage(true);
 };
+window.registerOldVisit = async function(patientId){
+  let patient = state.data.patients.find(p=>p.id===patientId);
+  if(!patient){
+    try{
+      const snap = await getDoc(doc(db,'patients',patientId));
+      if(snap.exists()) patient = { id:snap.id, ...snap.data() };
+    }catch(e){ console.error('Could not load patient', e); }
+  }
+  if(!patient){ showToast('Could not load this patient.'); return; }
+  resetVisitForm();
+  state.showVisitForm = true;
+  state.visitForm.selectedPatient = patient;
+  state.visitForm.date = '';
+  state.visitForm.previousVisitsLoading = true;
+  render(); window.scrollTo(0,0);
+  const [lastVitals, previousVisits] = await Promise.all([loadLastVitals(patient.id), loadPreviousVisits(patient.id)]);
+  if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===patient.id){
+    state.visitForm.lastVitals = lastVitals;
+    state.visitForm.previousVisits = previousVisits;
+    state.visitForm.previousVisitsLoading = false;
+    render();
+  }
+};
 
 function resetVisitForm(){
   state.editingVisit = null;
@@ -3601,6 +3624,7 @@ function viewAdminVisits(){
     ${state.visitsPatientFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div>Showing all visits for <strong>${escapeHtml(state.visitsPatientFilter.name)}</strong></div>
       <div class="row-actions">
+        <button class="btn btn-outline btn-small" onclick="registerOldVisit('${state.visitsPatientFilter.id}')">🕒 Register old visit</button>
         <button class="btn btn-outline btn-small" onclick="printPatientHistory('${state.visitsPatientFilter.id}')">🖨️ Print full history</button>
         <button class="btn btn-outline btn-small" onclick="notifyDoctorPatientHistory('${state.visitsPatientFilter.id}')">📱 Notify doctor</button>
         <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
