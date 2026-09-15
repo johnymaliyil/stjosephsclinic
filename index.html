@@ -1584,13 +1584,13 @@ window.printPrescription = function(visitId){
   w.focus();
   setTimeout(()=>w.print(), 300);
 };
-window.printPatientHistory = async function(patientId){
+async function loadPatientVisitHistory(patientId){
   let patient = null;
   try{
     const snap = await getDoc(doc(db,'patients',patientId));
     if(snap.exists()) patient = { id:snap.id, ...snap.data() };
-  }catch(e){ console.error('Could not load patient for print', e); }
-  if(!patient){ showToast('Could not load this patient.'); return; }
+  }catch(e){ console.error('Could not load patient', e); }
+  if(!patient) return null;
   let visits = [];
   try{
     // Equality-only filter, sorted client-side -- same composite-index-avoidance
@@ -1598,7 +1598,14 @@ window.printPatientHistory = async function(patientId){
     const q = query(collection(db,'visits'), where('patientId','==',patientId));
     const snap = await getDocs(q);
     visits = snap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
-  }catch(e){ console.error('Could not load visits for print', e); showToast('Could not load visit history.'); return; }
+  }catch(e){ console.error('Could not load visits', e); return { patient, visits: null }; }
+  return { patient, visits };
+}
+window.printPatientHistory = async function(patientId){
+  const result = await loadPatientVisitHistory(patientId);
+  if(!result){ showToast('Could not load this patient.'); return; }
+  if(!result.visits){ showToast('Could not load visit history.'); return; }
+  const { patient, visits } = result;
   const i = state.data.info;
   const visitRows = visits.map(v=>{
     const meds = (v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.dosage?` — ${escapeHtml(m.dosage)}`:''}${m.source==='outside'?' (to order)':''}`).join('<br>');
@@ -1639,6 +1646,33 @@ window.printPatientHistory = async function(patientId){
   w.document.close();
   w.focus();
   setTimeout(()=>w.print(), 300);
+};
+window.notifyDoctorPatientHistory = async function(patientId){
+  const i = state.data.info;
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  const result = await loadPatientVisitHistory(patientId);
+  if(!result){ showToast('Could not load this patient.'); return; }
+  if(!result.visits){ showToast('Could not load visit history.'); return; }
+  const { patient, visits } = result;
+  const MAX_VISITS = 8;
+  const recent = visits.slice(-MAX_VISITS).reverse();
+  const lines = [`Patient history — ${patient.name} (OPD ${patient.opdNo||'—'})`];
+  const details = [patient.age?`Age ${patient.age}`:'', patient.dob?`DOB ${patient.dob}`:'', patient.gender||''].filter(Boolean).join(' · ');
+  if(details) lines.push(details);
+  lines.push(`${visits.length} visit${visits.length===1?'':'s'} on record`, '');
+  recent.forEach(v=>{
+    lines.push(`${v.date} — ${v.reason||'—'}${v.doctorName?` (${v.doctorName})`:''}`);
+    const vitals = vitalsSummary(v);
+    if(vitals) lines.push(`  Vitals: ${vitals}`);
+    if(v.medicines && v.medicines.length){
+      lines.push(`  Meds: ${v.medicines.map(m=>`${m.name}${m.quantity?` x${m.quantity}`:''}`).join(', ')}`);
+    }
+    lines.push('');
+  });
+  if(visits.length > MAX_VISITS){
+    lines.push(`…and ${visits.length-MAX_VISITS} earlier visit${visits.length-MAX_VISITS===1?'':'s'} — see the printed history for full detail.`);
+  }
+  window.open(waLinkWithText(i.notifyWhatsapp, lines.join('\n')), '_blank');
 };
 
 /* ---------- billing ---------- */
@@ -3568,6 +3602,7 @@ function viewAdminVisits(){
       <div>Showing all visits for <strong>${escapeHtml(state.visitsPatientFilter.name)}</strong></div>
       <div class="row-actions">
         <button class="btn btn-outline btn-small" onclick="printPatientHistory('${state.visitsPatientFilter.id}')">🖨️ Print full history</button>
+        <button class="btn btn-outline btn-small" onclick="notifyDoctorPatientHistory('${state.visitsPatientFilter.id}')">📱 Notify doctor</button>
         <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
       </div>
     </div>` : `<div class="search-row" style="margin-bottom:16px;">
