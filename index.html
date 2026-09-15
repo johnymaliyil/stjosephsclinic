@@ -510,6 +510,19 @@ window.setLang = function(lang){
 };
 
 const STAFF_NAMES = ['Sheena', 'Danny'];
+// Simplified reference schedule based on India's Universal Immunization Programme.
+// Not medical guidance -- confirm exact timing with the doctor.
+const VACCINE_SCHEDULE = [
+  { key:'birth', label:'BCG, OPV-0, Hepatitis B (birth dose)', dueDays:0 },
+  { key:'w6', label:'OPV-1, Pentavalent-1, Rotavirus-1, IPV-1, PCV-1', dueDays:42 },
+  { key:'w10', label:'OPV-2, Pentavalent-2, Rotavirus-2', dueDays:70 },
+  { key:'w14', label:'OPV-3, Pentavalent-3, Rotavirus-3, IPV-2, PCV-2', dueDays:98 },
+  { key:'m9', label:'Measles-Rubella (MR-1), PCV booster', dueDays:274 },
+  { key:'m16', label:'DPT booster-1, OPV booster, MR-2', dueDays:486 },
+  { key:'y5', label:'DPT booster-2', dueDays:1826 },
+  { key:'y10', label:'TT/Tdap', dueDays:3652 },
+  { key:'y16', label:'TT/Tdap booster', dueDays:5844 }
+];
 const DEFAULT_INFO = {
   clinicName: "St Joseph's Children's & Diabetic Clinic",
   tagline: "Caring for children and families managing diabetes.",
@@ -575,6 +588,8 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
+  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[],
+  vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, date:todayISO(), notes:'' },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
   patientsReportLoading:false, reportPatients:[],
@@ -591,7 +606,7 @@ let state = {
     items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] },
   cleanlinessReportsLoading:false, hasMoreCleanlinessReports:false, showCleanlinessForm:false, cleanlinessPhotoProcessing:false,
   cleanlinessForm:{ staffName:STAFF_NAMES[0], area:'', rating:'good', notes:'', photos:[] },
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], cleanlinessReports:[], info:DEFAULT_INFO }
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], cleanlinessReports:[], vaccinations:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
@@ -600,6 +615,7 @@ let lastVisibleLabRecordDoc = null;
 let lastVisibleAttendanceDoc = null;
 let lastVisiblePurchaseDoc = null;
 let lastVisibleCleanlinessDoc = null;
+let lastVisibleVaccinationDoc = null;
 let viewHistory = [];
 let skipNextHistoryPush = false;
 function pushViewHistory(){
@@ -1219,6 +1235,7 @@ window.savePatientForm = async function(){
   const phone=document.getElementById('pf-phone').value.trim();
   const gender=document.getElementById('pf-gender').value;
   const age=document.getElementById('pf-age').value;
+  const dob=document.getElementById('pf-dob').value;
   const address=document.getElementById('pf-address').value.trim();
   if(!name || !opdNo){ showToast('OPD number and patient name are required.'); return; }
   const dupSnap = await getDocs(query(collection(db,'patients'), where('opdNo','==',opdNo), limit(1)));
@@ -1228,7 +1245,7 @@ window.savePatientForm = async function(){
     return;
   }
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
-    phone, gender, age, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
+    phone, gender, age, dob, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
   const wasEditing = !!state.editingPatient;
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
   else{ await addDoc(collection(db,'patients'), {...data, registrationFeeCharged:false}); }
@@ -2099,6 +2116,136 @@ window.saveLabRecordForm = async function(){
   showToast('👍 Lab test saved!', 'success'); render();
 };
 
+/* ---------- vaccinations ---------- */
+async function loadVaccinationsPage(reset){
+  state.vaccinationsLoading = true; render();
+  const term = state.vaccinationsSearchTerm.trim().toLowerCase();
+  try{
+    let q;
+    if(!term){
+      q = reset || !lastVisibleVaccinationDoc
+        ? query(collection(db,'vaccinations'), orderBy('createdAtMillis','desc'), limit(50))
+        : query(collection(db,'vaccinations'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleVaccinationDoc), limit(50));
+    }else{
+      q = reset || !lastVisibleVaccinationDoc
+        ? query(collection(db,'vaccinations'), orderBy('patientNameLower'), startAt(term), endAt(term+''), limit(50))
+        : query(collection(db,'vaccinations'), orderBy('patientNameLower'), startAfter(lastVisibleVaccinationDoc), endAt(term+''), limit(50));
+    }
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.vaccinations = reset ? docs : state.data.vaccinations.concat(docs);
+    lastVisibleVaccinationDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleVaccinationDoc;
+    state.hasMoreVaccinations = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load vaccinations — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.vaccinationsLoading = false; render();
+}
+window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); };
+window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
+function resetVaccinationForm(){
+  state.showVaccinationForm = false;
+  state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, date:todayISO(), notes:'' };
+}
+window.setVaccinationPatientSearchField = function(field){
+  state.vaccinationForm.patientSearchField = field;
+  state.vaccinationForm.patientQuery = '';
+  state.vaccinationForm.patientResults = [];
+  render();
+};
+window.searchVaccinationPatient = async function(term){
+  state.vaccinationForm.patientQuery = term;
+  const t = term.trim().toLowerCase();
+  if(!t){ state.vaccinationForm.patientResults = []; render(); return; }
+  try{
+    const fieldName = state.vaccinationForm.patientSearchField==='opdNo' ? 'opdNo' : 'nameLower';
+    const value = fieldName==='opdNo' ? term.trim() : t;
+    const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
+    const snap = await getDocs(q);
+    state.vaccinationForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
+  render();
+};
+window.selectVaccinationPatient = function(id){
+  const p = state.vaccinationForm.patientResults.find(x=>x.id===id);
+  if(p){ state.vaccinationForm.selectedPatient = p; state.vaccinationForm.patientQuery=''; state.vaccinationForm.patientResults=[]; }
+  render();
+};
+window.clearVaccinationPatient = function(){ state.vaccinationForm.selectedPatient = null; render(); };
+window.recordDueVaccination = function(patientId, vaccineKey){
+  const due = state.vaccinationsDue.find(v=>v.patientId===patientId && v.vaccineKey===vaccineKey);
+  if(!due) return;
+  state.showVaccinationForm = true;
+  state.vaccinationForm.selectedPatient = { id:due.patientId, name:due.patientName, opdNo:due.patientOpdNo, phone:due.patientPhone };
+  state.vaccinationForm.vaccineKey = due.vaccineKey;
+  render(); window.scrollTo(0,0);
+};
+window.deleteVaccination = async function(id){
+  if(!confirm('Delete this vaccination record? This cannot be undone.')) return;
+  try{ await deleteDoc(doc(db,'vaccinations',id)); }catch(e){ console.error(e); showToast('Could not delete vaccination record.'); return; }
+  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+};
+window.saveVaccinationForm = async function(){
+  const f = state.vaccinationForm;
+  if(!f.selectedPatient){ showToast('Please select a patient.'); return; }
+  const date = document.getElementById('vac-date').value;
+  const notes = document.getElementById('vac-notes').value.trim();
+  if(!date){ showToast('Please choose a date.'); return; }
+  const scheduleItem = VACCINE_SCHEDULE.find(v=>v.key===f.vaccineKey);
+  const data = {
+    patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
+    patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
+    vaccineKey:f.vaccineKey, vaccineLabel: scheduleItem?scheduleItem.label:f.vaccineKey,
+    date, notes, createdAtMillis:Date.now(), createdAt:new Date().toISOString()
+  };
+  try{
+    await addDoc(collection(db,'vaccinations'), data);
+  }catch(e){
+    console.error(e);
+    showToast('Could not save vaccination — check the browser console for details.');
+    return;
+  }
+  resetVaccinationForm();
+  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+  showToast('👍 Vaccination recorded!', 'success'); render();
+};
+async function loadVaccinationsDue(){
+  try{
+    const [patientsSnap, vaccSnap] = await Promise.all([
+      getDocs(collection(db,'patients')),
+      getDocs(collection(db,'vaccinations'))
+    ]);
+    const given = {};
+    vaccSnap.docs.forEach(d=>{
+      const v = d.data();
+      if(!v.patientId || !v.vaccineKey) return;
+      if(!given[v.patientId]) given[v.patientId] = new Set();
+      given[v.patientId].add(v.vaccineKey);
+    });
+    const today = new Date();
+    const due = [];
+    patientsSnap.docs.forEach(d=>{
+      const p = d.data();
+      if(!p.dob) return;
+      const dob = new Date(p.dob+'T00:00:00');
+      const ageDays = Math.floor((today - dob) / 86400000);
+      if(ageDays < 0) return;
+      const givenSet = given[d.id] || new Set();
+      const nextDue = VACCINE_SCHEDULE.find(item => ageDays >= item.dueDays && !givenSet.has(item.key));
+      if(nextDue){
+        due.push({
+          patientId:d.id, patientName:p.name, patientOpdNo:p.opdNo, patientPhone:p.phone,
+          vaccineKey:nextDue.key, vaccineLabel:nextDue.label,
+          daysOverdue: Math.round(ageDays - nextDue.dueDays)
+        });
+      }
+    });
+    due.sort((a,b)=>b.daysOverdue-a.daysOverdue);
+    state.vaccinationsDue = due;
+  }catch(e){ console.error('Could not compute vaccinations due', e); state.vaccinationsDue = []; }
+}
+
 /* ---------- reports (collections / patients / visits / inventory / lab tests) ---------- */
 async function loadCollectionsReport(){
   state.reportLoading = true; render();
@@ -2477,6 +2624,12 @@ window.exportCleanlinessReports = function(){
     {label:'Notes', value:'notes'}, {label:'Photo Count', value:r=>(r.photos||[]).length}
   ], 'cleanliness-reports');
 };
+window.exportVaccinations = function(){
+  runExport('Vaccinations', 'vaccinations', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Patient Name', value:'patientName'}, {label:'OPD No.', value:'patientOpdNo'},
+    {label:'Vaccine', value:v=>v.vaccineLabel||v.vaccineKey||''}, {label:'Notes', value:'notes'}
+  ], 'vaccinations');
+};
 
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
@@ -2628,6 +2781,7 @@ async function loadDashboardStats(){
   await Promise.all([loadMedicines(), loadAppointments()]);
   state.followUpsDue = await loadFollowUpsDue();
   await loadReorderAlerts();
+  await loadVaccinationsDue();
 }
 async function loadFollowUpsDue(){
   try{
@@ -2698,6 +2852,10 @@ window.setView = async function(v){
       state.labRecordPrefillVisit = null;
       state.showLabRecordForm = true;
     }
+  }
+  if(v==='admin-vaccinations'){
+    resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
+    await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
   }
   if(v==='admin-billing'){
     state.billsSearchTerm=''; lastVisibleBillDoc=null;
@@ -3066,7 +3224,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-reports','Reports'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-vaccinations','Vaccinations'],['admin-reports','Reports'],
     ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-cleanliness','Cleanliness Reports'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -3111,6 +3269,19 @@ function reorderAlertHtml(items){
     <div class="row-actions">
       <button class="btn btn-outline btn-small" onclick="setView('admin-purchases')">Record a purchase</button>
       <button class="btn btn-outline btn-small" onclick="setView('admin-inventory')">View inventory</button>
+    </div>
+  </div>`;
+}
+function vaccinationsDueAlertHtml(items){
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent);">
+    <h3 style="margin-top:0;">💉 ${items.length} child${items.length>1?'ren':''} due for a vaccination</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Based on India's Universal Immunization Programme schedule and each child's date of birth — confirm timing with the doctor.</p>
+    <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
+      ${items.slice(0,8).map(v=>`<li>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.vaccineLabel)}${v.daysOverdue>0?` (${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue)`:''}</li>`).join('')}
+      ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
+    </ul>
+    <div class="row-actions">
+      <button class="btn btn-outline btn-small" onclick="setView('admin-vaccinations')">View vaccinations</button>
     </div>
   </div>`;
 }
@@ -3164,6 +3335,7 @@ function viewAdminDashboard(){
     </div>
     ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
     ${(state.reorderAlerts&&state.reorderAlerts.length)? reorderAlertHtml(state.reorderAlerts) : ''}
+    ${(state.vaccinationsDue&&state.vaccinationsDue.length)? vaccinationsDueAlertHtml(state.vaccinationsDue) : ''}
     ${tomorrowAppts.length? tomorrowAppointmentsHtml(tomorrowAppts) : ''}
     ${followUps.length? followUpsDueHtml(followUps) : ''}
     <p style="color:var(--text-muted);font-size:14px;">Data is stored in your clinic's own Firebase project, accessible from any device where staff log in. Not a HIPAA/DPDP-compliant medical records system — treat it as an internal working tool.</p>
@@ -3180,6 +3352,9 @@ function viewAdminPatients(){
       <div class="field"><label>Phone</label><input id="pf-phone" type="text" value="${escapeHtml(p?p.phone:'')}"></div>
       <div class="field"><label>Gender</label><select id="pf-gender">${['Male','Female','Other'].map(g=>`<option ${p&&p.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field"><label>Age</label><input id="pf-age" type="number" min="0" value="${p?p.age:''}"></div>
+      <div class="field"><label>Date of birth (optional)</label><input id="pf-dob" type="date" value="${p&&p.dob?p.dob:''}">
+        <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Needed for vaccination due reminders.</p>
+      </div>
       <div class="field" style="grid-column:1/-1;"><label>Address</label><textarea id="pf-address" rows="2">${escapeHtml(p?p.address:'')}</textarea></div>
     </div>
     <div class="row-actions" style="margin-top:6px;">
@@ -3394,6 +3569,72 @@ function viewAdminLabTests(){
         : `<div class="empty-state"><div class="icon">🧪</div>No lab tests recorded yet.</div>`}
     </div>
     ${(!state.labRecordsLoading && state.hasMoreLabRecords) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreLabRecords()">Load 50 more</button></div>` : ''}
+  `);
+}
+function viewAdminVaccinations(){
+  const f = state.vaccinationForm;
+  const due = state.vaccinationsDue||[];
+  const patientBlock = f.selectedPatient
+    ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><strong>${escapeHtml(f.selectedPatient.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedPatient.opdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(f.selectedPatient.phone||'')}</span></div>
+        <button class="btn btn-outline btn-small" onclick="clearVaccinationPatient()">Change</button>
+      </div>`
+    : `<div>
+        <div class="search-row">
+          <select onchange="setVaccinationPatientSearchField(this.value)">
+            <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
+            <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
+          </select>
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVaccinationPatient(this.value)">
+        </div>
+        ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVaccinationPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
+      </div>`;
+  const showForm = state.showVaccinationForm;
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVaccinationForm=true; render();">+ Record a vaccination</button></div>` : `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">Record a vaccination</h3>
+    <div class="field"><label>Patient</label>${patientBlock}</div>
+    <div class="form-grid">
+      <div class="field" style="grid-column:1/-1;"><label>Vaccine / milestone</label>
+        <select onchange="state.vaccinationForm.vaccineKey=this.value;">
+          ${VACCINE_SCHEDULE.map(v=>`<option value="${v.key}" ${f.vaccineKey===v.key?'selected':''}>${escapeHtml(v.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Date given</label><input id="vac-date" type="date" value="${escapeHtml(f.date)}"></div>
+    </div>
+    <div class="field"><label>Notes (optional)</label><textarea id="vac-notes" rows="2">${escapeHtml(f.notes)}</textarea></div>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveVaccinationForm()">Save</button>
+      <button class="btn btn-outline" onclick="resetVaccinationForm(); render();">Cancel</button>
+    </div>
+  </div>`;
+  const dueCard = due.length ? `<div class="card" style="margin-bottom:20px;border-left:4px solid var(--accent);">
+    <h3 style="margin-top:0;">💉 ${due.length} child${due.length>1?'ren':''} due</h3>
+    ${due.map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(v.vaccineLabel)}${v.daysOverdue>0?` — ${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue`:''}</span></div>
+      <button class="btn btn-outline btn-small" onclick="recordDueVaccination('${v.patientId}','${v.vaccineKey}')">Record now</button>
+    </div>`).join('')}
+  </div>` : '';
+  const rows = state.data.vaccinations.map(v=>`<tr>
+    <td class="mono">${escapeHtml(v.date||'')}</td>
+    <td>${escapeHtml(v.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
+    <td>${escapeHtml(v.vaccineLabel||v.vaccineKey||'')}</td>
+    <td>${escapeHtml(v.notes||'')}</td>
+    <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteVaccination('${v.id}')">Delete</button></td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Vaccinations</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Reference schedule based on India's Universal Immunization Programme — confirm timing with the doctor. Due reminders need the patient's date of birth to be set (Patients (OPD) → Edit).</p>
+    ${dueCard}
+    ${formCard}
+    <div class="search-row" style="margin-bottom:16px;">
+      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.vaccinationsSearchTerm)}" oninput="setVaccinationsSearchTerm(this.value)">
+    </div>
+    <div class="table-wrap">
+      ${state.vaccinationsLoading? loadingSkeleton(5) :
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">💉</div>No vaccinations recorded yet.</div>`}
+    </div>
+    ${(!state.vaccinationsLoading && state.hasMoreVaccinations) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVaccinations()">Load 50 more</button></div>` : ''}
   `);
 }
 function viewAdminBilling(){
@@ -4037,6 +4278,7 @@ function viewAdminBackup(){
     {key:'exportPurchases', label:'Medicine purchases', icon:'📦', title:'Medicine Purchases', desc:'Every purchase from a distributor: date, invoice number, medicines received, purchase price, total and payment status.'},
     {key:'exportAttendance', label:'Staff attendance', icon:'🕒', title:'Staff Attendance', desc:'Every login/logout and manual check-in/check-out: staff, date, time (IST) and duration.'},
     {key:'exportCleanlinessReports', label:'Cleanliness reports', icon:'🧹', title:'Cleanliness Reports', desc:'Every cleanliness report: staff, area, rating, notes and how many photos were attached (photos themselves are not included in the CSV).'},
+    {key:'exportVaccinations', label:'Vaccinations', icon:'💉', title:'Vaccinations', desc:'Every vaccination recorded: date, patient and which vaccine/milestone was given.'},
     {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'},
     {key:'exportFeedback', label:'Feedback', icon:'💬', title:'Feedback', desc:'All feedback submitted from the website, with rating.'}
   ];
@@ -4153,6 +4395,7 @@ function render(){
       case 'admin-patients': html=viewAdminPatients(); break;
       case 'admin-visits': html=viewAdminVisits(); break;
       case 'admin-labtests': html=viewAdminLabTests(); break;
+      case 'admin-vaccinations': html=viewAdminVaccinations(); break;
       case 'admin-billing': html=viewAdminBilling(); break;
       case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
