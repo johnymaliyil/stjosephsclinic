@@ -1376,32 +1376,38 @@ async function selectBillVisitObject(v){
   state.billForm.medItems = medItemsFromVisit(v);
   state.billForm.extraItems = [{description:'',amount:''}];
   state.billForm.registrationFeePatientId = null;
-  state.billForm.consultationFee = 200;
   state.billForm.consultationFeeNote = null;
+
   if(v.patientId){
     try{
       const snap = await getDoc(doc(db,'patients',v.patientId));
       if(snap.exists() && snap.data().registrationFeeCharged===false){
-        state.billForm.extraItems = [{description:'Registration Fee', amount:20, isRegistrationFee:true}];
-        state.billForm.registrationFeePatientId = v.patientId;
+        const addRegFee = confirm('This is a new patient registration.\n\nAdd the ₹20 registration fee to this bill?');
+        if(addRegFee){
+          state.billForm.extraItems = [{description:'Registration Fee', amount:20, isRegistrationFee:true}];
+          state.billForm.registrationFeePatientId = v.patientId;
+        }
       }
     }catch(e){ console.error('Could not check registration fee status', e); }
-    // The ₹200 consultation fee covers 30 days -- if this patient already paid it
-    // recently, ask rather than silently charging (or silently waiving) it again.
-    const lastBill = await loadLastPaidConsultation(v.patientId);
-    if(lastBill){
-      const visitDate = new Date((v.date||todayISO())+'T00:00:00');
-      const lastDate = new Date(lastBill.date+'T00:00:00');
-      const daysSince = Math.round((visitDate - lastDate) / 86400000);
-      if(daysSince >= 0 && daysSince < 30){
-        const addAgain = confirm(`This patient's ₹200 consultation fee was already paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago) — it's valid for 30 days.\n\nAdd the consultation fee again for this bill anyway?`);
-        state.billForm.consultationFee = addAgain ? 200 : 0;
-        state.billForm.consultationFeeNote = addAgain
-          ? `Charged again by choice — last paid ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago).`
-          : `Waived — already paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago), within the 30-day validity.`;
-      }
-    }
   }
+
+  // Always ask rather than deciding silently -- staff know whether this visit
+  // needs a fresh consultation better than a date-based rule can.
+  let consultNote = '';
+  if(v.patientId){
+    try{
+      const lastBill = await loadLastPaidConsultation(v.patientId);
+      if(lastBill && lastBill.date){
+        const visitDate = new Date((v.date||todayISO())+'T00:00:00');
+        const lastDate = new Date(lastBill.date+'T00:00:00');
+        const daysSince = Math.round((visitDate - lastDate) / 86400000);
+        if(daysSince >= 0) consultNote = `\n\nLast paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago).`;
+      }
+    }catch(e){ console.error('Could not check last paid consultation fee', e); }
+  }
+  const addConsultFee = confirm(`Add the ₹200 consultation fee for this bill?${consultNote}`);
+  state.billForm.consultationFee = addConsultFee ? 200 : 0;
+  state.billForm.consultationFeeNote = addConsultFee ? null : 'No consultation fee added for this bill.';
 }
 window.clearBillVisit = function(){ state.billForm.selectedVisit = null; state.billForm.medItems = []; render(); };
 window.addBillMedItem = function(){ state.billForm.medItems.push({medicineId:'',name:'',quantity:1,unitPrice:0}); render(); };
