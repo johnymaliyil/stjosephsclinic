@@ -1486,6 +1486,9 @@ window.saveVisitForm = async function(){
   const outsideRows = f.meds.filter(m=>m.source==='outside' && (m.name||'').trim());
   const outsideMeds = outsideRows.map(m=>({ source:'outside', name:m.name.trim(), quantity:m.quantity?Number(m.quantity):null, dosage:(m.dosage||'').trim() }));
   const medicines = [...pharmacyMeds, ...outsideMeds];
+  if(medicines.length===0){
+    if(!confirm('No prescription or medicine details have been added for this visit.\n\nSave anyway?')) return;
+  }
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
