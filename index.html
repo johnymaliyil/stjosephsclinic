@@ -580,6 +580,7 @@ let state = {
   patientsReportLoading:false, reportPatients:[],
   visitsReportLoading:false, reportVisitsList:[],
   labReportLoading:false, reportLabRecords:[],
+  purchasesReportLoading:false, reportPurchases:[],
   backupExporting:'',
   whatsappCampaignsLoading:false, whatsappSending:false,
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
@@ -2066,11 +2067,25 @@ async function loadLabRecordsReportData(){
   }
   state.labReportLoading = false; render();
 }
+async function loadPurchasesReportData(){
+  state.purchasesReportLoading = true; render();
+  try{
+    const q = query(collection(db,'purchases'), where('date','>=',state.reportFrom), where('date','<=',state.reportTo), orderBy('date'));
+    const snap = await getDocs(q);
+    state.reportPurchases = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){
+    console.error('Failed to load purchases report', e);
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    state.reportPurchases = [];
+  }
+  state.purchasesReportLoading = false; render();
+}
 function reloadCurrentReportTab(){
   if(state.reportTab==='collections') return loadCollectionsReport();
   if(state.reportTab==='patients') return loadPatientsReport();
   if(state.reportTab==='visits' || state.reportTab==='inventory') return loadVisitsReportData();
   if(state.reportTab==='labtests') return loadLabRecordsReportData();
+  if(state.reportTab==='purchases') return loadPurchasesReportData();
 }
 window.setReportTab = function(tab){ state.reportTab=tab; state.reportDetailFilter=null; reloadCurrentReportTab(); };
 window.setReportFrom = function(v){ state.reportFrom=v; state.reportDetailFilter=null; reloadCurrentReportTab(); };
@@ -2220,6 +2235,30 @@ function labReportByDay(records){
     if(!map[d]) map[d] = {date:d, count:0, amount:0};
     map[d].count++;
     map[d].amount += Number(r.amount)||0;
+  });
+  return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function filteredReportPurchases(){
+  const f = state.reportDetailFilter;
+  if(!f) return [];
+  return state.reportPurchases.filter(p=>!f.date || p.date===f.date).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function purchasesReportTotals(purchases){
+  let totalAmount=0, paidAmount=0, unpaidAmount=0;
+  purchases.forEach(p=>{
+    const amt = Number(p.totalAmount)||0;
+    totalAmount += amt;
+    if(p.paymentStatus==='paid') paidAmount += amt; else unpaidAmount += amt;
+  });
+  return { count:purchases.length, totalAmount, paidAmount, unpaidAmount };
+}
+function purchasesReportByDay(purchases){
+  const map = {};
+  purchases.forEach(p=>{
+    const d = p.date||'—';
+    if(!map[d]) map[d] = {date:d, count:0, amount:0};
+    map[d].count++;
+    map[d].amount += Number(p.totalAmount)||0;
   });
   return Object.values(map).sort((a,b)=>b.date.localeCompare(a.date));
 }
@@ -3465,14 +3504,53 @@ function reportTabLabTests(){
     </div>
     ${detail}`;
 }
+function reportTabPurchases(){
+  const totals = purchasesReportTotals(state.reportPurchases);
+  const byDay = purchasesReportByDay(state.reportPurchases);
+  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Purchases on ${escapeHtml(d.date)}')">
+    <td class="mono">${escapeHtml(d.date)}</td>
+    <td class="mono">${d.count}</td>
+    <td class="mono">₹${d.amount.toFixed(2)}</td>
+  </tr>`).join('');
+  const detail = state.reportDetailFilter ? (()=>{
+    const purchases = filteredReportPurchases();
+    const rows = purchases.map(p=>`<tr>
+      <td class="mono">${escapeHtml(p.date||'')}</td>
+      <td>${escapeHtml(p.distributorName||'')}</td>
+      <td class="mono">${escapeHtml(p.invoiceNumber||'—')}</td>
+      <td>${(p.items||[]).map(i=>`${escapeHtml(i.name)} × ${escapeHtml(String(i.quantity))}`).join(', ') || '—'}</td>
+      <td class="mono">₹${(Number(p.totalAmount)||0).toFixed(2)}</td>
+      <td><span class="badge ${p.paymentStatus==='paid'?'badge-ok':'badge-low'}">${p.paymentStatus==='paid'?'Paid':'Unpaid'}</span></td>
+    </tr>`).join('');
+    return `${reportDetailHeader(state.reportDetailFilter.label)}
+    <div class="table-wrap">
+      ${purchases.length? `<table><thead><tr><th>Date</th><th>Distributor</th><th>Invoice</th><th>Medicines</th><th>Total</th><th>Payment</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty-state"><div class="icon">📦</div>No purchases match this filter.</div>`}
+    </div>`;
+  })() : '';
+  return `
+    <div class="stat-row">
+      <div class="stat-card stat-card-link" onclick="setReportDetailFilter(null,null,'All purchases')"><div class="num">${totals.count}</div><div class="label">Purchases</div></div>
+      <div class="stat-card"><div class="num">₹${totals.totalAmount.toFixed(2)}</div><div class="label">Total spent</div></div>
+      <div class="stat-card"><div class="num">₹${totals.paidAmount.toFixed(2)}</div><div class="label">Paid</div></div>
+      <div class="stat-card"><div class="num">₹${totals.unpaidAmount.toFixed(2)}</div><div class="label">Unpaid</div></div>
+    </div>
+    <div class="table-wrap">
+      ${state.purchasesReportLoading? loadingSkeleton(5) :
+        byDay.length ? `<table><thead><tr><th>Date</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📊</div>No purchases in this date range.</div>`}
+    </div>
+    ${detail}`;
+}
 function viewAdminReports(){
-  const tabs = [['collections','Collections'],['patients','Patients'],['visits','Visits'],['inventory','Inventory'],['labtests','Lab Tests']];
+  const tabs = [['collections','Collections'],['patients','Patients'],['visits','Visits'],['inventory','Inventory'],['labtests','Lab Tests'],['purchases','Purchases']];
   const tabNav = `<div class="row-actions" style="margin-bottom:16px;">${tabs.map(([k,l])=>`<button class="btn ${state.reportTab===k?'btn-primary':'btn-outline'} btn-small" onclick="setReportTab('${k}')">${l}</button>`).join('')}</div>`;
   let body = '';
   if(state.reportTab==='patients') body = reportTabPatients();
   else if(state.reportTab==='visits') body = reportTabVisits();
   else if(state.reportTab==='inventory') body = reportTabInventory();
   else if(state.reportTab==='labtests') body = reportTabLabTests();
+  else if(state.reportTab==='purchases') body = reportTabPurchases();
   else body = reportTabCollections();
   return adminShell(`
     <h2 class="display">Reports</h2>
