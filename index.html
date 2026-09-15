@@ -3409,6 +3409,66 @@ window.sendLowStockAlert = function(){
   const msg = `Low stock alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}: ${m.quantity} ${m.unit||''} left`).join('\n');
   window.open(waLinkWithText(target, msg), '_blank');
 };
+function expiryStatusText(m){
+  const d = daysUntil(m.expiry);
+  return d<0 ? `expired ${Math.abs(d)} day${Math.abs(d)===1?'':'s'} ago` : `expires in ${d} day${d===1?'':'s'}`;
+}
+function expiringMedsAlertHtml(items){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger,#c0392b);">
+    <h3 style="margin-top:0;">⏰ ${items.length} medicine${items.length>1?'s':''} expired or expiring soon</h3>
+    <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
+      ${items.slice(0,8).map(m=>`<li>${escapeHtml(m.name)}${m.batch?` (batch ${escapeHtml(m.batch)})`:''} — ${expiryStatusText(m)}</li>`).join('')}
+      ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
+    </ul>
+    <div class="row-actions">
+      ${target?`<button class="btn btn-outline btn-small" onclick="sendExpiryAlert()">Send alert via WhatsApp</button>`:''}
+      <button class="btn btn-outline btn-small" onclick="setView('admin-inventory')">View inventory</button>
+    </div>
+  </div>`;
+}
+window.sendExpiryAlert = function(){
+  const items = state.data.medicines.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label));
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const msg = `Medicine expiry alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}${m.batch?` (batch ${m.batch})`:''}: ${expiryStatusText(m)}`).join('\n');
+  window.open(waLinkWithText(target, msg), '_blank');
+};
+window.sendDailySummary = async function(){
+  const i = state.data.info;
+  const target = i.notifyWhatsapp || i.whatsapp;
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  const today = todayISO();
+  let visitsToday = 0, cashTotal = 0, upiTotal = 0;
+  try{
+    const visitSnap = await getDocs(query(collection(db,'visits'), where('date','==',today)));
+    visitsToday = visitSnap.docs.length;
+  }catch(e){ console.error('Could not load today\'s visits for summary', e); }
+  try{
+    const billSnap = await getDocs(query(collection(db,'bills'), where('date','==',today)));
+    billSnap.docs.forEach(d=>{
+      const b = d.data();
+      const amt = Number(b.grandTotal)||0;
+      if(b.paymentMethod==='upi') upiTotal += amt; else cashTotal += amt;
+    });
+  }catch(e){ console.error('Could not load today\'s bills for summary', e); }
+  const meds = state.data.medicines;
+  const lowStockCount = meds.filter(m=>medStatus(m).label==='Low stock').length;
+  const expiringCount = meds.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label)).length;
+  const vaccinationsDueCount = (state.vaccinationsDue||[]).length;
+  const lines = [
+    `Daily summary — ${i.clinicName}, ${today}`,
+    ``,
+    `Patients seen today: ${visitsToday}`,
+    `Collections today: ${money(cashTotal+upiTotal)} (Cash ${money(cashTotal)}, UPI ${money(upiTotal)})`
+  ];
+  if(lowStockCount) lines.push(`⚠️ ${lowStockCount} medicine${lowStockCount>1?'s':''} low on stock`);
+  if(expiringCount) lines.push(`⏰ ${expiringCount} medicine${expiringCount>1?'s':''} expired/expiring soon`);
+  if(vaccinationsDueCount) lines.push(`💉 ${vaccinationsDueCount} vaccination${vaccinationsDueCount>1?'s':''} due`);
+  window.open(waLinkWithText(target, lines.join('\n')), '_blank');
+};
 function tomorrowAppointmentsHtml(appts){
   return `<div class="card" style="margin-bottom:16px;">
     <h3 style="margin-top:0;">📅 ${appts.length} appointment${appts.length>1?'s':''} tomorrow</h3>
@@ -3439,6 +3499,7 @@ window.sendFollowUpReminder = function(patientId){
 function viewAdminDashboard(){
   const meds=state.data.medicines;
   const lowStock = meds.filter(m=>medStatus(m).label==='Low stock');
+  const expiringMeds = meds.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label)).sort((a,b)=>daysUntil(a.expiry)-daysUntil(b.expiry));
   const tomorrow = (()=>{ const d=new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })();
   const tomorrowAppts = state.data.appointments.filter(a=>a.date===tomorrow && a.status!=='done' && a.status!=='cancelled');
   const followUps = state.followUpsDue||[];
@@ -3449,7 +3510,11 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
+    <div class="row-actions" style="margin-bottom:16px;">
+      <button class="btn btn-outline btn-small" onclick="sendDailySummary()">📋 Send today's summary via WhatsApp</button>
+    </div>
     ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
+    ${expiringMeds.length? expiringMedsAlertHtml(expiringMeds) : ''}
     ${(state.reorderAlerts&&state.reorderAlerts.length)? reorderAlertHtml(state.reorderAlerts) : ''}
     ${(state.vaccinationsDue&&state.vaccinationsDue.length)? vaccinationsDueAlertHtml(state.vaccinationsDue) : ''}
     ${tomorrowAppts.length? tomorrowAppointmentsHtml(tomorrowAppts) : ''}
