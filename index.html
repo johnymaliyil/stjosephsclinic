@@ -589,7 +589,9 @@ let state = {
   unpaidPurchasesLoading:false,
   purchaseForm:{ distributorName:'', invoiceNumber:'', date:todayISO(), paymentStatus:'unpaid', notes:'',
     items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] },
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], info:DEFAULT_INFO }
+  cleanlinessReportsLoading:false, hasMoreCleanlinessReports:false, showCleanlinessForm:false, cleanlinessPhotoProcessing:false,
+  cleanlinessForm:{ staffName:STAFF_NAMES[0], area:'', rating:'good', notes:'', photos:[] },
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], cleanlinessReports:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
@@ -597,6 +599,7 @@ let lastVisibleBillDoc = null;
 let lastVisibleLabRecordDoc = null;
 let lastVisibleAttendanceDoc = null;
 let lastVisiblePurchaseDoc = null;
+let lastVisibleCleanlinessDoc = null;
 let viewHistory = [];
 let skipNextHistoryPush = false;
 function pushViewHistory(){
@@ -985,6 +988,90 @@ window.deletePurchase = async function(id){
     await batch.commit();
   }catch(e){ console.error(e); showToast('Could not delete purchase.'); return; }
   lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]);
+};
+
+/* ---------- cleanliness reports ---------- */
+function resizeImageFile(file, maxWidth, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const scale = Math.min(1, maxWidth/img.width);
+        const w = Math.round(img.width*scale) || 1, h = Math.round(img.height*scale) || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function loadCleanlinessReportsPage(reset){
+  state.cleanlinessReportsLoading = true; render();
+  try{
+    const q = reset || !lastVisibleCleanlinessDoc
+      ? query(collection(db,'cleanlinessReports'), orderBy('createdAtMillis','desc'), limit(20))
+      : query(collection(db,'cleanlinessReports'), orderBy('createdAtMillis','desc'), startAfter(lastVisibleCleanlinessDoc), limit(20));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.cleanlinessReports = reset ? docs : state.data.cleanlinessReports.concat(docs);
+    lastVisibleCleanlinessDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisibleCleanlinessDoc;
+    state.hasMoreCleanlinessReports = snap.docs.length === 20;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load cleanliness reports — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.cleanlinessReportsLoading = false; render();
+}
+window.loadMoreCleanlinessReports = function(){ loadCleanlinessReportsPage(false); };
+function resetCleanlinessForm(){
+  state.showCleanlinessForm = false;
+  state.cleanlinessForm = { staffName:STAFF_NAMES[0], area:'', rating:'good', notes:'', photos:[] };
+}
+window.handleCleanlinessPhotoFile = async function(input){
+  const files = Array.from(input.files||[]);
+  if(!files.length) return;
+  const remaining = 3 - state.cleanlinessForm.photos.length;
+  if(remaining<=0){ showToast('You can attach up to 3 photos per report.'); input.value=''; return; }
+  state.cleanlinessPhotoProcessing = true; render();
+  for(const file of files.slice(0, remaining)){
+    try{
+      const dataUri = await resizeImageFile(file, 800, 0.6);
+      state.cleanlinessForm.photos.push(dataUri);
+    }catch(e){ console.error(e); showToast('Could not process one of the photos.'); }
+  }
+  state.cleanlinessPhotoProcessing = false;
+  input.value = '';
+  render();
+};
+window.removeCleanlinessPhoto = function(idx){ state.cleanlinessForm.photos.splice(idx,1); render(); };
+window.saveCleanlinessReport = async function(){
+  const f = state.cleanlinessForm;
+  if(!f.staffName){ showToast('Please select who is filing this report.'); return; }
+  if(!f.notes.trim() && !f.photos.length){ showToast('Add a note or at least one photo.'); return; }
+  try{
+    await addDoc(collection(db,'cleanlinessReports'), {
+      staffName: f.staffName, area: f.area.trim(), rating: f.rating, notes: f.notes.trim(), photos: f.photos.slice(),
+      date: todayISO(), createdAtMillis: Date.now(), createdAt: new Date().toISOString()
+    });
+  }catch(e){
+    console.error(e);
+    showToast('Could not save the report — if it has photos, try fewer or smaller ones.');
+    return;
+  }
+  resetCleanlinessForm();
+  lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true);
+  showToast('👍 Cleanliness report submitted!', 'success'); render();
+};
+window.deleteCleanlinessReport = async function(id){
+  if(!confirm('Delete this cleanliness report? This cannot be undone.')) return;
+  try{ await deleteDoc(doc(db,'cleanlinessReports',id)); }catch(e){ console.error(e); showToast('Could not delete report.'); return; }
+  lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true);
 };
 
 /* ---------- appointments ---------- */
@@ -2383,6 +2470,13 @@ window.exportPurchases = function(){
     {label:'Notes', value:'notes'}
   ], 'medicine-purchases');
 };
+window.exportCleanlinessReports = function(){
+  runExport('Cleanliness reports', 'cleanlinessReports', 'createdAtMillis', [
+    {label:'Date', value:'date'}, {label:'Staff', value:'staffName'}, {label:'Area', value:'area'},
+    {label:'Rating', value:r=>r.rating==='good'?'Good':r.rating==='poor'?'Poor':'Needs attention'},
+    {label:'Notes', value:'notes'}, {label:'Photo Count', value:r=>(r.photos||[]).length}
+  ], 'cleanliness-reports');
+};
 
 /* ---------- auth ---------- */
 window.tryAdminLogin = async function(){
@@ -2590,6 +2684,7 @@ window.setView = async function(v){
   if(v==='admin-feedback') await loadFeedback();
   if(v==='admin-whatsapp') await loadWhatsappCampaigns();
   if(v==='admin-attendance'){ lastVisibleAttendanceDoc=null; await loadAttendancePage(true); }
+  if(v==='admin-cleanliness'){ resetCleanlinessForm(); lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true); }
   if(v==='healthcheck'){
     state.healthCheckForm = { age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }; state.healthCheckResult = null;
   }
@@ -2925,7 +3020,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-reports','Reports'],
-    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-cleanliness','Cleanliness Reports'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -3792,6 +3887,62 @@ function viewAdminAttendance(){
     ${(!state.attendanceLoading && state.hasMoreAttendance) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreAttendance()">Load 50 more</button></div>` : ''}
   `);
 }
+function viewAdminCleanliness(){
+  const f = state.cleanlinessForm;
+  const ratingOptions = [['good','✅ Good'],['attention','⚠️ Needs attention'],['poor','🔴 Poor']];
+  const photoThumbs = f.photos.map((src,idx)=>`<div style="position:relative;display:inline-block;margin:0 8px 8px 0;">
+    <img src="${src}" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block;">
+    <button type="button" onclick="removeCleanlinessPhoto(${idx})" title="Remove" style="position:absolute;top:-6px;right:-6px;background:var(--danger,#c0392b);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;line-height:1;">×</button>
+  </div>`).join('');
+  const showForm = state.showCleanlinessForm;
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showCleanlinessForm=true; render();">+ New cleanliness report</button></div>` : `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">Report cleanliness</h3>
+    <div class="form-grid">
+      <div class="field"><label>Reported by</label>
+        <select onchange="state.cleanlinessForm.staffName=this.value;">
+          ${STAFF_NAMES.map(n=>`<option value="${n}" ${f.staffName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Area (optional)</label><input type="text" placeholder="e.g. Waiting area, Restroom" value="${escapeHtml(f.area)}" onchange="state.cleanlinessForm.area=this.value;"></div>
+      <div class="field"><label>Rating</label>
+        <select onchange="state.cleanlinessForm.rating=this.value;">
+          ${ratingOptions.map(([v,l])=>`<option value="${v}" ${f.rating===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Notes</label><textarea rows="3" placeholder="What did you notice?" onchange="state.cleanlinessForm.notes=this.value;">${escapeHtml(f.notes)}</textarea></div>
+    <div class="field">
+      <label>Photos (up to 3)</label>
+      <div>${photoThumbs}</div>
+      ${f.photos.length<3?`<input type="file" accept="image/*" capture="environment" multiple onchange="handleCleanlinessPhotoFile(this)">`:''}
+      ${state.cleanlinessPhotoProcessing?`<p class="mono" style="margin-top:6px;">🔎 Processing photo…</p>`:''}
+    </div>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveCleanlinessReport()">Submit report</button>
+      <button class="btn btn-outline" onclick="resetCleanlinessForm(); render();">Cancel</button>
+    </div>
+  </div>`;
+  const ratingBadge = r => r==='good' ? '<span class="badge badge-ok">Good</span>' : r==='poor' ? '<span class="badge badge-low">Poor</span>' : '<span class="badge badge-warn">Needs attention</span>';
+  const cards = state.data.cleanlinessReports.map(r=>`<div class="card" style="margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+      <div>
+        <strong>${escapeHtml(r.staffName||'')}</strong> ${ratingBadge(r.rating)}
+        <div style="color:var(--text-muted);font-size:13px;">${escapeHtml(r.date||'')}${r.area?` · ${escapeHtml(r.area)}`:''}</div>
+      </div>
+      <button class="btn btn-danger btn-small" onclick="deleteCleanlinessReport('${r.id}')">Delete</button>
+    </div>
+    ${r.notes?`<p style="margin:10px 0 0;">${escapeHtml(r.notes)}</p>`:''}
+    ${(r.photos&&r.photos.length)?`<div style="margin-top:10px;">${r.photos.map(src=>`<a href="${src}" target="_blank" rel="noopener"><img src="${src}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border);margin-right:6px;"></a>`).join('')}</div>`:''}
+  </div>`).join('');
+  return adminShell(`
+    <h2 class="display">Cleanliness Reports</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Staff can log a quick note and photos about the clinic's cleanliness for the record.</p>
+    ${formCard}
+    ${state.cleanlinessReportsLoading? loadingSkeleton(3) :
+      cards || `<div class="empty-state"><div class="icon">🧹</div>No cleanliness reports yet.</div>`}
+    ${(!state.cleanlinessReportsLoading && state.hasMoreCleanlinessReports) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreCleanlinessReports()">Load 20 more</button></div>` : ''}
+  `);
+}
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
   const items = [
@@ -3802,6 +3953,7 @@ function viewAdminBackup(){
     {key:'exportMedicines', label:'Medicine inventory', icon:'💊', title:'Medicine Inventory', desc:'Current stock list: name, batch, expiry, quantity, unit, reorder level and price.'},
     {key:'exportPurchases', label:'Medicine purchases', icon:'📦', title:'Medicine Purchases', desc:'Every purchase from a distributor: date, invoice number, medicines received, purchase price, total and payment status.'},
     {key:'exportAttendance', label:'Staff attendance', icon:'🕒', title:'Staff Attendance', desc:'Every login/logout and manual check-in/check-out: staff, date, time (IST) and duration.'},
+    {key:'exportCleanlinessReports', label:'Cleanliness reports', icon:'🧹', title:'Cleanliness Reports', desc:'Every cleanliness report: staff, area, rating, notes and how many photos were attached (photos themselves are not included in the CSV).'},
     {key:'exportAppointments', label:'Appointment requests', icon:'📅', title:'Appointment Requests', desc:'All appointment requests submitted from the website, with status.'},
     {key:'exportFeedback', label:'Feedback', icon:'💬', title:'Feedback', desc:'All feedback submitted from the website, with rating.'}
   ];
@@ -3931,6 +4083,7 @@ function render(){
       case 'admin-feedback': html=viewAdminFeedback(); break;
       case 'admin-whatsapp': html=viewAdminWhatsapp(); break;
       case 'admin-attendance': html=viewAdminAttendance(); break;
+      case 'admin-cleanliness': html=viewAdminCleanliness(); break;
       default: html=viewHome();
     }
   }
