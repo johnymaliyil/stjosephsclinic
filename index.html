@@ -3441,11 +3441,12 @@ window.sendDailySummary = async function(){
   const target = i.notifyWhatsapp || i.whatsapp;
   if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
   const today = todayISO();
-  let visitsToday = 0, cashTotal = 0, upiTotal = 0;
+  let visitsTodayList = [], cashTotal = 0, upiTotal = 0;
   try{
     const visitSnap = await getDocs(query(collection(db,'visits'), where('date','==',today)));
-    visitsToday = visitSnap.docs.length;
+    visitsTodayList = visitSnap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
   }catch(e){ console.error('Could not load today\'s visits for summary', e); }
+  const visitsToday = visitsTodayList.length;
   try{
     const billSnap = await getDocs(query(collection(db,'bills'), where('date','==',today)));
     billSnap.docs.forEach(d=>{
@@ -3467,6 +3468,21 @@ window.sendDailySummary = async function(){
   if(lowStockCount) lines.push(`⚠️ ${lowStockCount} medicine${lowStockCount>1?'s':''} low on stock`);
   if(expiringCount) lines.push(`⏰ ${expiringCount} medicine${expiringCount>1?'s':''} expired/expiring soon`);
   if(vaccinationsDueCount) lines.push(`💉 ${vaccinationsDueCount} vaccination${vaccinationsDueCount>1?'s':''} due`);
+  if(visitsTodayList.length){
+    const MAX_VISITS = 20;
+    lines.push('', 'Visit details:');
+    visitsTodayList.slice(0,MAX_VISITS).forEach(v=>{
+      lines.push(`- ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}) — ${v.reason||'No reason recorded'}`);
+      if(v.medicines && v.medicines.length){
+        lines.push(`  Meds: ${v.medicines.map(m=>`${m.name}${m.quantity?` x${m.quantity}`:''}`).join(', ')}`);
+      }else{
+        lines.push('  Meds: none recorded');
+      }
+    });
+    if(visitsTodayList.length > MAX_VISITS){
+      lines.push(`…and ${visitsTodayList.length-MAX_VISITS} more visit${visitsTodayList.length-MAX_VISITS===1?'':'s'}.`);
+    }
+  }
   window.open(waLinkWithText(target, lines.join('\n')), '_blank');
 };
 function tomorrowAppointmentsHtml(appts){
