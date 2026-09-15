@@ -562,10 +562,10 @@ let state = {
   medSearch:'', editingPatient:null, editingMed:null,
   patientCount:null, visitCount:null, followUpsDue:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
-  visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'',
+  visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
   editingVisit:null,
-  billsLoading:false, hasMoreBills:false, billsSearchTerm:'', showBillForm:false,
+  billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
   labRecordPrefillVisit:null,
@@ -1026,6 +1026,37 @@ async function loadVisitsPage(reset){
 }
 window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); };
 window.loadMoreVisits = function(){ loadVisitsPage(false); };
+window.viewPatientVisits = async function(patientId){
+  const patient = state.data.patients.find(p=>p.id===patientId);
+  state.view='admin-visits'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  resetBillForm();
+  resetVisitForm();
+  state.visitsSearchTerm = '';
+  state.visitsPatientFilter = { id:patientId, name: patient?patient.name:'' };
+  try{ localStorage.setItem('lastAdminView','admin-visits'); }catch(e){}
+  lastVisibleVisitDoc = null;
+  state.visitsLoading = true; render(); window.scrollTo(0,0);
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'visits'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    state.data.visits = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+    state.hasMoreVisits = false;
+    await loadMedicines();
+  }catch(e){
+    console.error(e);
+    showToast('Could not load visits for this patient.');
+    state.data.visits = [];
+  }
+  state.visitsLoading = false; render();
+};
+window.clearVisitsPatientFilter = function(){
+  state.visitsPatientFilter = null;
+  lastVisibleVisitDoc = null;
+  loadVisitsPage(true);
+};
 
 function resetVisitForm(){
   state.editingVisit = null;
@@ -1322,6 +1353,36 @@ async function loadBillsPage(reset){
 }
 window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); };
 window.loadMoreBills = function(){ loadBillsPage(false); };
+window.viewPatientBills = async function(patientId){
+  const patient = state.data.patients.find(p=>p.id===patientId);
+  state.view='admin-billing'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  resetBillForm();
+  state.billsSearchTerm = '';
+  state.billsPatientFilter = { id:patientId, name: patient?patient.name:'' };
+  try{ localStorage.setItem('lastAdminView','admin-billing'); }catch(e){}
+  lastVisibleBillDoc = null;
+  state.billsLoading = true; render(); window.scrollTo(0,0);
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'bills'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    state.data.bills = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+    state.hasMoreBills = false;
+    await loadMedicines();
+  }catch(e){
+    console.error(e);
+    showToast('Could not load bills for this patient.');
+    state.data.bills = [];
+  }
+  state.billsLoading = false; render();
+};
+window.clearBillsPatientFilter = function(){
+  state.billsPatientFilter = null;
+  lastVisibleBillDoc = null;
+  loadBillsPage(true);
+};
 
 function resetBillForm(){
   state.showBillForm = false;
@@ -2717,7 +2778,7 @@ function viewAdminPatients(){
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
     <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deletePatient('${pt.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deletePatient('${pt.id}')">Delete</button></td>
   </tr>`).join('');
   const searchRow=`<div class="search-row" style="margin-bottom:16px;">
     <select onchange="setPatientSearchField(this.value)">
@@ -2839,9 +2900,12 @@ function viewAdminVisits(){
   return adminShell(`
     <h2 class="display">Patient Visits</h2>
     ${formCard}
-    <div class="search-row" style="margin-bottom:16px;">
+    ${state.visitsPatientFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>Showing all visits for <strong>${escapeHtml(state.visitsPatientFilter.name)}</strong></div>
+      <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
+    </div>` : `<div class="search-row" style="margin-bottom:16px;">
       <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)">
-    </div>
+    </div>`}
     <div class="table-wrap">
       ${state.visitsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -2983,9 +3047,12 @@ function viewAdminBilling(){
   return adminShell(`
     <h2 class="display">Billing</h2>
     ${formCard}
-    <div class="search-row" style="margin-bottom:16px;">
+    ${state.billsPatientFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>Showing all bills for <strong>${escapeHtml(state.billsPatientFilter.name)}</strong></div>
+      <button class="btn btn-outline btn-small" onclick="clearBillsPatientFilter()">Show all bills</button>
+    </div>` : `<div class="search-row" style="margin-bottom:16px;">
       <input type="text" placeholder="Search bills by patient name…" value="${escapeHtml(state.billsSearchTerm)}" oninput="setBillsSearchTerm(this.value)">
-    </div>
+    </div>`}
     <div class="table-wrap">
       ${state.billsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
