@@ -563,7 +563,7 @@ let state = {
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null,
-  patientCount:null, visitCount:null, followUpsDue:[],
+  patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
@@ -2627,6 +2627,7 @@ async function loadDashboardStats(){
   catch(e){ console.error('Failed to load patient visit count', e); state.visitCount = null; }
   await Promise.all([loadMedicines(), loadAppointments()]);
   state.followUpsDue = await loadFollowUpsDue();
+  await loadReorderAlerts();
 }
 async function loadFollowUpsDue(){
   try{
@@ -2647,6 +2648,32 @@ async function loadFollowUpsDue(){
       .filter(v=>v.daysSinceLastVisit >= 90)
       .sort((a,b)=>b.daysSinceLastVisit-a.daysSinceLastVisit);
   }catch(e){ console.error('Could not load follow-ups due', e); return []; }
+}
+async function loadReorderAlerts(){
+  const LOOKBACK_DAYS = 30;
+  const ALERT_THRESHOLD_DAYS = 14;
+  try{
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-LOOKBACK_DAYS);
+    const cutoffISO = cutoff.toISOString().slice(0,10);
+    const q = query(collection(db,'visits'), where('date','>=',cutoffISO));
+    const snap = await getDocs(q);
+    const dispensed = {};
+    snap.docs.forEach(d=>{
+      const v = d.data();
+      (v.medicines||[]).forEach(m=>{
+        if(m.source==='outside' || !m.medicineId) return;
+        dispensed[m.medicineId] = (dispensed[m.medicineId]||0) + (Number(m.quantity)||0);
+      });
+    });
+    state.reorderAlerts = state.data.medicines.map(med=>{
+      const qtyUsed = dispensed[med.id]||0;
+      const dailyRate = qtyUsed/LOOKBACK_DAYS;
+      if(dailyRate<=0) return null;
+      const daysLeft = (Number(med.quantity)||0)/dailyRate;
+      if(daysLeft > ALERT_THRESHOLD_DAYS) return null;
+      return { id:med.id, name:med.name, quantity:med.quantity, unit:med.unit, dailyRate, daysLeft: Math.round(daysLeft*10)/10 };
+    }).filter(Boolean).sort((a,b)=>a.daysLeft-b.daysLeft);
+  }catch(e){ console.error('Could not compute reorder alerts', e); state.reorderAlerts = []; }
 }
 
 /* ---------- toast / router ---------- */
@@ -2678,7 +2705,7 @@ window.setView = async function(v){
     if(state.billingPrefillVisit){ await selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
   }
   if(v==='admin-reports') await reloadCurrentReportTab();
-  if(v==='admin-inventory') await loadMedicines();
+  if(v==='admin-inventory'){ await loadMedicines(); await loadReorderAlerts(); }
   if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]); }
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
@@ -3073,6 +3100,20 @@ function lowStockAlertHtml(items){
     </div>
   </div>`;
 }
+function reorderAlertHtml(items){
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent);">
+    <h3 style="margin-top:0;">⏳ ${items.length} medicine${items.length>1?'s':''} predicted to run out soon</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Based on how fast each has been dispensed over the last 30 days — separate from Low Stock, which just checks the reorder level you've set.</p>
+    <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
+      ${items.slice(0,8).map(i=>`<li>${escapeHtml(i.name)} — ~${i.daysLeft} day${i.daysLeft===1?'':'s'} left (${escapeHtml(String(i.quantity))} ${escapeHtml(i.unit||'')} in stock)</li>`).join('')}
+      ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
+    </ul>
+    <div class="row-actions">
+      <button class="btn btn-outline btn-small" onclick="setView('admin-purchases')">Record a purchase</button>
+      <button class="btn btn-outline btn-small" onclick="setView('admin-inventory')">View inventory</button>
+    </div>
+  </div>`;
+}
 window.sendLowStockAlert = function(){
   const items = state.data.medicines.filter(m=>medStatus(m).label==='Low stock');
   const i = state.data.info;
@@ -3122,6 +3163,7 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
     </div>
     ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
+    ${(state.reorderAlerts&&state.reorderAlerts.length)? reorderAlertHtml(state.reorderAlerts) : ''}
     ${tomorrowAppts.length? tomorrowAppointmentsHtml(tomorrowAppts) : ''}
     ${followUps.length? followUpsDueHtml(followUps) : ''}
     <p style="color:var(--text-muted);font-size:14px;">Data is stored in your clinic's own Firebase project, accessible from any device where staff log in. Not a HIPAA/DPDP-compliant medical records system — treat it as an internal working tool.</p>
@@ -3724,11 +3766,13 @@ function viewAdminInventory(){
       <button class="btn btn-primary" onclick="saveMedForm()">${m?'Save changes':'Add to inventory'}</button>
       <button class="btn btn-outline" onclick="state.editingMed=null; state.showMedForm=false; render();">Cancel</button>
     </div></div>`;
-  const rows=list.map(x=>{const s=medStatus(x); return `<tr>
+  const reorderById = {};
+  (state.reorderAlerts||[]).forEach(r=>{ reorderById[r.id]=r; });
+  const rows=list.map(x=>{const s=medStatus(x); const r=reorderById[x.id]; return `<tr>
     <td>${escapeHtml(x.name)}</td><td class="mono">${escapeHtml(x.batch)}</td><td class="mono">${escapeHtml(x.expiry)}</td>
     <td class="mono">${escapeHtml(x.quantity)} ${escapeHtml(x.unit)}</td><td class="mono">${escapeHtml(x.reorderLevel)}</td>
     <td class="mono">${x.price?'₹'+escapeHtml(x.price):'—'}</td>
-    <td><span class="badge ${s.cls}">${s.label}</span></td>
+    <td><span class="badge ${s.cls}">${s.label}</span>${r?`<div style="color:var(--accent);font-size:11px;margin-top:3px;">⏳ ~${r.daysLeft}d left</div>`:''}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editMed('${x.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteMed('${x.id}')">Delete</button></td>
   </tr>`;}).join('');
   return adminShell(`
