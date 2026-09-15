@@ -584,13 +584,17 @@ let state = {
   whatsappCampaignsLoading:false, whatsappSending:false,
   whatsappForm:{ templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' },
   attendanceLoading:false, hasMoreAttendance:false,
-  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], info:DEFAULT_INFO }
+  purchasesLoading:false, hasMorePurchases:false, showPurchaseForm:false, editingPurchase:null,
+  purchaseForm:{ distributorName:'', invoiceNumber:'', date:todayISO(), paymentStatus:'unpaid', notes:'',
+    items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] },
+  data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], info:DEFAULT_INFO }
 };
 let lastVisibleDoc = null;
 let lastVisibleVisitDoc = null;
 let lastVisibleBillDoc = null;
 let lastVisibleLabRecordDoc = null;
 let lastVisibleAttendanceDoc = null;
+let lastVisiblePurchaseDoc = null;
 let viewHistory = [];
 let skipNextHistoryPush = false;
 function pushViewHistory(){
@@ -848,6 +852,121 @@ window.saveMedForm = async function(){
   else{ await addDoc(collection(db,'medicines'), data); }
   state.showMedForm=false;
   await loadMedicines(); showToast('Inventory updated.'); render();
+};
+
+/* ---------- medicine purchases ---------- */
+async function loadPurchasesPage(reset){
+  state.purchasesLoading = true; render();
+  try{
+    const q = reset || !lastVisiblePurchaseDoc
+      ? query(collection(db,'purchases'), orderBy('createdAtMillis','desc'), limit(50))
+      : query(collection(db,'purchases'), orderBy('createdAtMillis','desc'), startAfter(lastVisiblePurchaseDoc), limit(50));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.data.purchases = reset ? docs : state.data.purchases.concat(docs);
+    lastVisiblePurchaseDoc = snap.docs.length ? snap.docs[snap.docs.length-1] : lastVisiblePurchaseDoc;
+    state.hasMorePurchases = snap.docs.length === 50;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load purchases — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+  }
+  state.purchasesLoading = false; render();
+}
+window.loadMorePurchases = function(){ loadPurchasesPage(false); };
+function resetPurchaseForm(){
+  state.showPurchaseForm = false;
+  state.editingPurchase = null;
+  state.purchaseForm = { distributorName:'', invoiceNumber:'', date:todayISO(), paymentStatus:'unpaid', notes:'',
+    items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] };
+}
+window.addPurchaseItem = function(){ state.purchaseForm.items.push({isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}); render(); };
+window.removePurchaseItem = function(idx){
+  state.purchaseForm.items.splice(idx,1);
+  if(!state.purchaseForm.items.length) state.purchaseForm.items.push({isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''});
+  render();
+};
+window.updatePurchaseItem = function(idx,key,val){
+  const item = state.purchaseForm.items[idx];
+  if(key==='isNew'){
+    item.isNew = (val==='new');
+    item.medicineId=''; item.name=''; item.unit='';
+  }else if(key==='medicineId'){
+    const med = state.data.medicines.find(x=>x.id===val);
+    item.medicineId = val; item.name = med?med.name:''; item.unit = med?med.unit:'';
+  }else{
+    item[key] = val;
+  }
+  render();
+};
+function purchaseTotals(f){
+  return f.items.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.purchasePrice)||0), 0);
+}
+window.savePurchaseForm = async function(){
+  const f = state.purchaseForm;
+  const distributorName = document.getElementById('pf-distributor').value.trim();
+  const invoiceNumber = document.getElementById('pf-invoice').value.trim();
+  const date = document.getElementById('pf-date').value;
+  const notes = document.getElementById('pf-notes').value.trim();
+  if(!distributorName){ showToast('Please enter the distributor name.'); return; }
+  if(!date){ showToast('Please choose a receipt date.'); return; }
+  const validItems = f.items.filter(i=>(i.isNew?i.name.trim():i.medicineId) && Number(i.quantity)>0);
+  if(!validItems.length){ showToast('Add at least one medicine with a quantity.'); return; }
+  const batch = writeBatch(db);
+  const items = [];
+  validItems.forEach(i=>{
+    const quantity = Number(i.quantity);
+    const purchasePrice = Number(i.purchasePrice)||0;
+    if(i.isNew){
+      const medRef = doc(collection(db,'medicines'));
+      batch.set(medRef, {
+        name:i.name.trim(), unit:i.unit.trim(), quantity, reorderLevel:0, price:0,
+        batch:i.batch||'', expiry:i.expiry||'', createdAt:new Date().toISOString()
+      });
+      items.push({ medicineId:medRef.id, name:i.name.trim(), unit:i.unit.trim(), quantity, purchasePrice, lineTotal:quantity*purchasePrice, batch:i.batch||'', expiry:i.expiry||'' });
+    }else{
+      const medUpdate = { quantity:increment(quantity) };
+      if(i.batch) medUpdate.batch = i.batch;
+      if(i.expiry) medUpdate.expiry = i.expiry;
+      batch.update(doc(db,'medicines',i.medicineId), medUpdate);
+      items.push({ medicineId:i.medicineId, name:i.name, unit:i.unit, quantity, purchasePrice, lineTotal:quantity*purchasePrice, batch:i.batch||'', expiry:i.expiry||'' });
+    }
+  });
+  const totalAmount = items.reduce((s,i)=>s+i.lineTotal, 0);
+  const purchaseRef = doc(collection(db,'purchases'));
+  batch.set(purchaseRef, {
+    distributorName, invoiceNumber, date, items, totalAmount,
+    paymentStatus: f.paymentStatus==='paid' ? 'paid' : 'unpaid', notes,
+    createdAtMillis: Date.now(), createdAt: new Date().toISOString()
+  });
+  try{
+    await batch.commit();
+  }catch(e){
+    console.error(e);
+    showToast('Could not save purchase — check the browser console for details.');
+    return;
+  }
+  resetPurchaseForm();
+  lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]);
+  showToast('👍 Purchase recorded and inventory updated!', 'success'); render();
+};
+window.togglePurchasePayment = async function(id){
+  const p = state.data.purchases.find(x=>x.id===id);
+  if(!p) return;
+  const newStatus = p.paymentStatus==='paid' ? 'unpaid' : 'paid';
+  try{ await updateDoc(doc(db,'purchases',id), {paymentStatus:newStatus}); }catch(e){ console.error(e); showToast('Could not update payment status.'); return; }
+  p.paymentStatus = newStatus; render();
+};
+window.deletePurchase = async function(id){
+  const p = state.data.purchases.find(x=>x.id===id);
+  if(!p) return;
+  if(!confirm('Delete this purchase record? The stock added by it will be deducted back from inventory.')) return;
+  const batch = writeBatch(db);
+  (p.items||[]).forEach(i=>{ if(i.medicineId && Number(i.quantity)) batch.update(doc(db,'medicines',i.medicineId), {quantity:increment(-Number(i.quantity))}); });
+  batch.delete(doc(db,'purchases',id));
+  try{
+    await batch.commit();
+  }catch(e){ console.error(e); showToast('Could not delete purchase.'); return; }
+  lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]);
 };
 
 /* ---------- appointments ---------- */
@@ -2395,6 +2514,7 @@ window.setView = async function(v){
   }
   if(v==='admin-reports') await reloadCurrentReportTab();
   if(v==='admin-inventory') await loadMedicines();
+  if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]); }
   if(v==='admin-appointments') await loadAppointments();
   if(v==='admin-feedback') await loadFeedback();
   if(v==='admin-whatsapp') await loadWhatsappCampaigns();
@@ -2733,7 +2853,7 @@ function viewAdminLogin(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-labtests','Lab Tests'],['admin-reports','Reports'],
+  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-reports','Reports'],
     ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
@@ -3373,6 +3493,90 @@ function viewAdminInventory(){
     <div class="table-wrap">${list.length?`<table><thead><tr><th>Name</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Reorder at</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💊</div>No medicines match your search yet.</div>`}</div>
   `);
 }
+function viewAdminPurchases(){
+  const f = state.purchaseForm;
+  const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const itemRows = f.items.map((i,idx)=>{
+    const medicineField = i.isNew
+      ? `<div class="field" style="margin-bottom:0;"><label>New medicine name</label><input type="text" placeholder="e.g. Amoxicillin 250mg" value="${escapeHtml(i.name||'')}" onchange="updatePurchaseItem(${idx},'name',this.value)"></div>`
+      : `<div class="field" style="margin-bottom:0;"><label>Medicine</label>
+        <select onchange="updatePurchaseItem(${idx},'medicineId',this.value)">
+          <option value="">— Select —</option>
+          ${medOptions.map(x=>`<option value="${x.id}" ${i.medicineId===x.id?'selected':''}>${escapeHtml(x.name)} (${escapeHtml(String(x.quantity))} ${escapeHtml(x.unit||'')} in stock)</option>`).join('')}
+        </select>
+      </div>`;
+    return `<div class="form-grid" style="grid-template-columns:1fr 1.4fr .8fr .9fr .9fr .9fr auto;align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>Source</label>
+        <select onchange="updatePurchaseItem(${idx},'isNew',this.value)">
+          <option value="existing" ${!i.isNew?'selected':''}>Existing medicine</option>
+          <option value="new" ${i.isNew?'selected':''}>New medicine</option>
+        </select>
+      </div>
+      ${medicineField}
+      ${i.isNew?`<div class="field" style="margin-bottom:0;"><label>Unit</label><input type="text" placeholder="e.g. tabs" value="${escapeHtml(i.unit||'')}" onchange="updatePurchaseItem(${idx},'unit',this.value)"></div>`:`<div class="field" style="margin-bottom:0;"><label>Unit</label><input type="text" value="${escapeHtml(i.unit||'')}" disabled></div>`}
+      <div class="field" style="margin-bottom:0;"><label>Quantity</label><input type="number" min="0" value="${escapeHtml(i.quantity)}" onchange="updatePurchaseItem(${idx},'quantity',this.value)"></div>
+      <div class="field" style="margin-bottom:0;"><label>Purchase price (₹/unit)</label><input type="number" min="0" step="0.01" value="${escapeHtml(i.purchasePrice)}" onchange="updatePurchaseItem(${idx},'purchasePrice',this.value)"></div>
+      <div class="field" style="margin-bottom:0;"><label>Batch / Expiry</label>
+        <div style="display:flex;gap:4px;">
+          <input type="text" placeholder="Batch" value="${escapeHtml(i.batch||'')}" onchange="updatePurchaseItem(${idx},'batch',this.value)">
+          <input type="date" value="${i.expiry||''}" onchange="updatePurchaseItem(${idx},'expiry',this.value)">
+        </div>
+      </div>
+      <button class="btn btn-outline btn-small" onclick="removePurchaseItem(${idx})">Remove</button>
+    </div>`;
+  }).join('');
+  const total = purchaseTotals(f);
+  const showForm = state.showPurchaseForm;
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showPurchaseForm=true; render();">+ New purchase entry</button></div>` : `<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">Record a medicine purchase (goods receipt)</h3>
+    <div class="form-grid">
+      <div class="field"><label>Distributor name</label><input id="pf-distributor" type="text" value="${escapeHtml(f.distributorName)}" onchange="state.purchaseForm.distributorName=this.value;"></div>
+      <div class="field"><label>Invoice / Bill No.</label><input id="pf-invoice" type="text" value="${escapeHtml(f.invoiceNumber)}" onchange="state.purchaseForm.invoiceNumber=this.value;"></div>
+      <div class="field"><label>Receipt date</label><input id="pf-date" type="date" value="${escapeHtml(f.date)}" onchange="state.purchaseForm.date=this.value;"></div>
+      <div class="field"><label>Payment status</label>
+        <select id="pf-payment-status" onchange="state.purchaseForm.paymentStatus=this.value; render();">
+          <option value="unpaid" ${f.paymentStatus!=='paid'?'selected':''}>Payment not made</option>
+          <option value="paid" ${f.paymentStatus==='paid'?'selected':''}>Payment made</option>
+        </select>
+      </div>
+    </div>
+    <label>Medicines received</label>
+    ${itemRows}
+    <button class="btn btn-outline btn-small" onclick="addPurchaseItem()">+ Add medicine</button>
+    <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">Saving adds the quantities straight to Medicine Inventory. Batch/Expiry are optional — leave blank to keep the medicine's existing values.</p>
+    <div class="field" style="margin-top:14px;"><label>Notes (optional)</label><textarea id="pf-notes" rows="2" onchange="state.purchaseForm.notes=this.value;">${escapeHtml(f.notes)}</textarea></div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:right;">
+      <div class="display" style="font-size:22px;color:var(--primary-dark);">Total: ₹${total.toFixed(2)}</div>
+    </div>
+    <div class="row-actions" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="savePurchaseForm()">Save purchase</button>
+      <button class="btn btn-outline" onclick="resetPurchaseForm(); render();">Cancel</button>
+    </div>
+  </div>`;
+  const rows = state.data.purchases.map(p=>`<tr>
+    <td class="mono">${escapeHtml(p.date||'')}</td>
+    <td>${escapeHtml(p.distributorName||'')}</td>
+    <td class="mono">${escapeHtml(p.invoiceNumber||'—')}</td>
+    <td>${(p.items||[]).map(i=>`${escapeHtml(i.name)} × ${escapeHtml(String(i.quantity))}`).join(', ') || '—'}</td>
+    <td class="mono">₹${(Number(p.totalAmount)||0).toFixed(2)}</td>
+    <td><span class="badge ${p.paymentStatus==='paid'?'badge-ok':'badge-low'}">${p.paymentStatus==='paid'?'Paid':'Unpaid'}</span></td>
+    <td class="row-actions">
+      <button class="btn btn-outline btn-small" onclick="togglePurchasePayment('${p.id}')">${p.paymentStatus==='paid'?'Mark unpaid':'Mark paid'}</button>
+      <button class="btn btn-danger btn-small" onclick="deletePurchase('${p.id}')">Delete</button>
+    </td>
+  </tr>`).join('');
+  return adminShell(`
+    <h2 class="display">Medicine Purchases</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Record goods received from medical distributors — inventory is updated automatically when you save.</p>
+    ${formCard}
+    <div class="table-wrap">
+      ${state.purchasesLoading? loadingSkeleton(6) :
+        rows? `<table><thead><tr><th>Date</th><th>Distributor</th><th>Invoice</th><th>Medicines</th><th>Total</th><th>Payment</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="icon">📦</div>No purchases recorded yet.</div>`}
+    </div>
+    ${(!state.purchasesLoading && state.hasMorePurchases) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMorePurchases()">Load 50 more</button></div>` : ''}
+  `);
+}
 function viewAdminAppointments(){
   const rows=state.data.appointments.map(a=>`<tr>
     <td>${escapeHtml(a.name)}</td><td class="mono">${escapeHtml(a.phone)}</td><td>${escapeHtml(a.consultationType||'—')}</td><td class="mono">${escapeHtml(a.date)}</td><td>${escapeHtml(a.reason)}</td>
@@ -3591,6 +3795,7 @@ function render(){
       case 'admin-billing': html=viewAdminBilling(); break;
       case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
+      case 'admin-purchases': html=viewAdminPurchases(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
       case 'admin-backup': html=viewAdminBackup(); break;
       case 'admin-info': html=viewAdminInfo(); break;
