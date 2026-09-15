@@ -3470,9 +3470,20 @@ window.sendDailySummary = async function(){
   if(vaccinationsDueCount) lines.push(`💉 ${vaccinationsDueCount} vaccination${vaccinationsDueCount>1?'s':''} due`);
   if(visitsTodayList.length){
     const MAX_VISITS = 20;
+    const patientAges = {};
+    try{
+      const patientIds = [...new Set(visitsTodayList.map(v=>v.patientId).filter(Boolean))];
+      await Promise.all(patientIds.map(async pid=>{
+        try{
+          const snap = await getDoc(doc(db,'patients',pid));
+          if(snap.exists() && snap.data().age) patientAges[pid] = snap.data().age;
+        }catch(e){ console.error('Could not load patient age', e); }
+      }));
+    }catch(e){ console.error('Could not load patient ages for summary', e); }
     lines.push('', 'Visit details:');
     visitsTodayList.slice(0,MAX_VISITS).forEach(v=>{
-      lines.push(`- ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}) — ${v.reason||'No reason recorded'}`);
+      const age = patientAges[v.patientId];
+      lines.push(`- ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}${age?`, Age ${age}`:''}) — ${v.reason||'No reason recorded'}`);
       if(v.medicines && v.medicines.length){
         lines.push(`  Meds: ${v.medicines.map(m=>`${m.name}${m.quantity?` x${m.quantity}`:''}`).join(', ')}`);
       }else{
