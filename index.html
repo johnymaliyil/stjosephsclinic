@@ -868,7 +868,7 @@ window.saveMedForm = async function(){
   const unit=document.getElementById('mf-unit').value.trim();
   const reorderLevel=document.getElementById('mf-reorder').value;
   const price=document.getElementById('mf-price').value;
-  if(!name){ showToast('Medicine name is required.'); return; }
+  if(!name){ showToast('Medicine name is required. / മരുന്നിന്റെ പേര് നിർബന്ധമാണ്.'); return; }
   const data={name,batch,expiry,quantity,unit,reorderLevel,price,updatedAt:new Date().toISOString()};
   if(state.editingMed){ await updateDoc(doc(db,'medicines',state.editingMed.id), data); state.editingMed=null; }
   else{ await addDoc(collection(db,'medicines'), data); }
@@ -944,10 +944,10 @@ window.savePurchaseForm = async function(){
   const invoiceNumber = document.getElementById('pf-invoice').value.trim();
   const date = document.getElementById('pf-date').value;
   const notes = document.getElementById('pf-notes').value.trim();
-  if(!distributorName){ showToast('Please enter the distributor name.'); return; }
-  if(!date){ showToast('Please choose a receipt date.'); return; }
+  if(!distributorName){ showToast('Please enter the distributor name. / ദയവായി ഡിസ്ട്രിബ്യൂട്ടറിന്റെ പേര് നൽകുക.'); return; }
+  if(!date){ showToast('Please choose a receipt date. / ദയവായി രസീത് തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
   const validItems = f.items.filter(i=>(i.isNew?i.name.trim():i.medicineId) && Number(i.quantity)>0);
-  if(!validItems.length){ showToast('Add at least one medicine with a quantity.'); return; }
+  if(!validItems.length){ showToast('Add at least one medicine with a quantity. / ദയവായി അളവ് സഹിതം ഒരു മരുന്നെങ്കിലും ചേർക്കുക.'); return; }
   const batch = writeBatch(db);
   const items = [];
   validItems.forEach(i=>{
@@ -997,7 +997,7 @@ window.togglePurchasePayment = async function(id){
 window.deletePurchase = async function(id){
   const p = state.data.purchases.find(x=>x.id===id) || state.data.unpaidPurchases.find(x=>x.id===id);
   if(!p) return;
-  if(!confirm('Delete this purchase record? The stock added by it will be deducted back from inventory.')) return;
+  if(!confirm('Delete this purchase record? The stock added by it will be deducted back from inventory.\nഈ പർച്ചേസ് രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇതിലൂടെ ചേർത്ത സ്റ്റോക്ക് ഇൻവെന്ററിയിൽ നിന്ന് തിരികെ കുറയ്ക്കും.')) return;
   const batch = writeBatch(db);
   (p.items||[]).forEach(i=>{ if(i.medicineId && Number(i.quantity)) batch.update(doc(db,'medicines',i.medicineId), {quantity:increment(-Number(i.quantity))}); });
   batch.delete(doc(db,'purchases',id));
@@ -1086,7 +1086,7 @@ window.saveCleanlinessReport = async function(){
   showToast('👍 Cleanliness report submitted!', 'success'); render();
 };
 window.deleteCleanlinessReport = async function(id){
-  if(!confirm('Delete this cleanliness report? This cannot be undone.')) return;
+  if(!confirm('Delete this cleanliness report? This cannot be undone.\nഈ ശുചിത്വ റിപ്പോർട്ട് ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{ await deleteDoc(doc(db,'cleanlinessReports',id)); }catch(e){ console.error(e); showToast('Could not delete report.'); return; }
   lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true);
 };
@@ -1511,7 +1511,7 @@ window.editVisit = async function(id){
 window.deleteVisit = async function(id){
   const v = state.data.visits.find(x=>x.id===id);
   if(!v) return;
-  if(!confirm('Delete this visit record? Any stock deducted for it will be restored to inventory.')) return;
+  if(!confirm('Delete this visit record? Any stock deducted for it will be restored to inventory.\nഈ സന്ദർശന രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇതിനായി കുറച്ച സ്റ്റോക്ക് ഇൻവെന്ററിയിലേക്ക് തിരികെ ചേർക്കും.')) return;
   const batch = writeBatch(db);
   (v.medicines||[]).forEach(m=>{ if(m.medicineId && Number(m.quantity)) batch.update(doc(db,'medicines',m.medicineId), {quantity:increment(Number(m.quantity))}); });
   batch.delete(doc(db,'visits',id));
@@ -1529,7 +1529,7 @@ window.saveVisitForm = async function(){
   const bp = document.getElementById('vf-bp').value.trim();
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
-  if(!date){ showToast('Please choose a visit date.'); return; }
+  if(!date){ showToast('Please choose a visit date. / ദയവായി സന്ദർശന തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
   const pharmacyRows = f.meds.filter(m=>(m.source||'pharmacy')==='pharmacy' && m.medicineId && Number(m.quantity)>0);
   const pharmacyMeds = pharmacyRows.map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
@@ -1846,7 +1846,7 @@ async function selectBillVisitObject(v){
     try{
       const snap = await getDoc(doc(db,'patients',v.patientId));
       if(snap.exists() && snap.data().registrationFeeCharged===false){
-        const addRegFee = confirm('This is a new patient registration.\n\nAdd the ₹20 registration fee to this bill?');
+        const addRegFee = confirm('This is a new patient registration.\nഇത് ഒരു പുതിയ രോഗി രജിസ്ട്രേഷനാണ്.\n\nAdd the ₹20 registration fee to this bill? / ₹20 രജിസ്ട്രേഷൻ ഫീസ് ഈ ബില്ലിൽ ചേർക്കണോ?');
         if(addRegFee){
           state.billForm.extraItems = [{description:'Registration Fee', amount:20, isRegistrationFee:true}];
           state.billForm.registrationFeePatientId = v.patientId;
@@ -1869,7 +1869,7 @@ async function selectBillVisitObject(v){
       }
     }catch(e){ console.error('Could not check last paid consultation fee', e); }
   }
-  const addConsultFee = confirm(`Add the ₹200 consultation fee for this bill?${consultNote}`);
+  const addConsultFee = confirm(`Add the ₹200 consultation fee for this bill? / ₹200 കൺസൾട്ടേഷൻ ഫീസ് ഈ ബില്ലിൽ ചേർക്കണോ?${consultNote}`);
   state.billForm.consultationFee = addConsultFee ? 200 : 0;
   state.billForm.consultationFeeNote = addConsultFee ? null : 'No consultation fee added for this bill.';
 }
@@ -1964,7 +1964,7 @@ window.saveBillForm = async function(){
 window.deleteBill = async function(id){
   const b = state.data.bills.find(x=>x.id===id);
   if(!b) return;
-  if(!confirm('Delete this bill? This cannot be undone.')) return;
+  if(!confirm('Delete this bill? This cannot be undone.\nഈ ബിൽ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   const batch = writeBatch(db);
   batch.delete(doc(db,'bills',id));
   if(b.visitId) batch.update(doc(db,'visits',b.visitId), {billId:null, billNumber:null});
@@ -2130,7 +2130,7 @@ async function loadAttendancePage(reset){
 }
 window.loadMoreAttendance = function(){ loadAttendancePage(false); };
 window.deleteAttendance = async function(id){
-  if(!confirm('Delete this attendance record? This cannot be undone.')) return;
+  if(!confirm('Delete this attendance record? This cannot be undone.\nഈ ഹാജർ രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{ await deleteDoc(doc(db,'attendance',id)); }catch(e){ console.error(e); showToast('Could not delete attendance record.'); return; }
   lastVisibleAttendanceDoc=null; await loadAttendancePage(true);
 };
@@ -2225,7 +2225,7 @@ window.editLabRecord = function(id){
   render(); window.scrollTo(0,0);
 };
 window.deleteLabRecord = async function(id){
-  if(!confirm('Delete this lab test record? This cannot be undone.')) return;
+  if(!confirm('Delete this lab test record? This cannot be undone.\nഈ ലാബ് ടെസ്റ്റ് രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{
     await deleteDoc(doc(db,'labRecords',id));
   }catch(e){ console.error(e); showToast('Could not delete lab test record.'); return; }
@@ -2327,7 +2327,7 @@ window.recordDueVaccination = function(patientId, vaccineKey){
   render(); window.scrollTo(0,0);
 };
 window.deleteVaccination = async function(id){
-  if(!confirm('Delete this vaccination record? This cannot be undone.')) return;
+  if(!confirm('Delete this vaccination record? This cannot be undone.\nഈ വാക്സിനേഷൻ രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{ await deleteDoc(doc(db,'vaccinations',id)); }catch(e){ console.error(e); showToast('Could not delete vaccination record.'); return; }
   lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
 };
@@ -3406,6 +3406,7 @@ function lowStockAlertHtml(items){
   const target = i.notifyWhatsapp || i.whatsapp;
   return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger,#c0392b);">
     <h3 style="margin-top:0;">⚠️ ${items.length} medicine${items.length>1?'s':''} low on stock</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">സ്റ്റോക്ക് കുറവുള്ള മരുന്നുകൾ.</p>
     <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
       ${items.slice(0,8).map(m=>`<li>${escapeHtml(m.name)} — ${escapeHtml(String(m.quantity))} ${escapeHtml(m.unit||'')} left</li>`).join('')}
       ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
@@ -3460,6 +3461,7 @@ function expiringMedsAlertHtml(items){
   const target = i.notifyWhatsapp || i.whatsapp;
   return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger,#c0392b);">
     <h3 style="margin-top:0;">⏰ ${items.length} medicine${items.length>1?'s':''} expired or expiring soon</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">കാലാവധി കഴിഞ്ഞതോ കാലാവധി അടുത്തതോ ആയ മരുന്നുകൾ.</p>
     <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
       ${items.slice(0,8).map(m=>`<li>${escapeHtml(m.name)}${m.batch?` (batch ${escapeHtml(m.batch)})`:''} — ${expiryStatusText(m)}</li>`).join('')}
       ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
