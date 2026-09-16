@@ -3659,7 +3659,10 @@ function viewAdminVisits(){
   const patientBlock = f.selectedPatient
     ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <div><strong>${escapeHtml(f.selectedPatient.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedPatient.opdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(f.selectedPatient.phone||'')}</span></div>
-        <button class="btn btn-outline btn-small" onclick="clearVisitPatient()">Change</button>
+        <div class="row-actions">
+          <button class="btn btn-outline btn-small" onclick="printPatientHistory('${f.selectedPatient.id}')">🖨️ Print visit history</button>
+          <button class="btn btn-outline btn-small" onclick="clearVisitPatient()">Change</button>
+        </div>
       </div>`
     : `<div>
         <div class="search-row">
