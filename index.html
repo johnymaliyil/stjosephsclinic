@@ -605,6 +605,7 @@ let state = {
   purchaseForm:{ distributorName:'', invoiceNumber:'', date:todayISO(), paymentStatus:'unpaid', notes:'',
     items:[{isNew:false, medicineId:'', name:'', unit:'', quantity:'', purchasePrice:'', batch:'', expiry:''}] },
   cleanlinessReportsLoading:false, hasMoreCleanlinessReports:false, showCleanlinessForm:false, cleanlinessPhotoProcessing:false,
+  prescriptionScanLoading:false,
   cleanlinessForm:{ staffName:STAFF_NAMES[0], area:'', rating:'good', notes:'', photos:[] },
   data:{ patients:[], medicines:[], appointments:[], blogPosts:[], visits:[], bills:[], labRecords:[], feedback:[], whatsappCampaigns:[], attendance:[], purchases:[], unpaidPurchases:[], cleanlinessReports:[], vaccinations:[], info:DEFAULT_INFO }
 };
@@ -1458,6 +1459,34 @@ window.updateVisitMedRow = function(idx,key,val){
   const row = state.visitForm.meds[idx];
   row[key]=val;
   if(key==='source'){ row.medicineId=''; row.name=''; row.quantity=''; render(); }
+};
+window.scanPrescriptionImage = async function(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if(!file) return;
+  state.prescriptionScanLoading = true; render();
+  try{
+    const dataUri = await resizeImageFile(file, 1200, 0.8);
+    const imageBase64 = dataUri.split(',')[1] || '';
+    const call = httpsCallable(fbFunctions, 'extractPrescriptionFromImage', { timeout: 60000 });
+    const res = await call({ imageBase64 });
+    const found = (res.data && res.data.medicines) || [];
+    if(!found.length){
+      showToast('Could not find any medicine lines in that image — try a clearer, well-lit photo.');
+    }else{
+      const f = state.visitForm;
+      if(f.meds.length===1 && !f.meds[0].name && !f.meds[0].medicineId && !f.meds[0].quantity){
+        f.meds = [];
+      }
+      found.forEach(m=>f.meds.push({ source:'outside', medicineId:'', name:m.name||'', quantity:'', dosage:m.dosage||'' }));
+      f.date = todayISO();
+      showToast(`Found ${found.length} medicine${found.length>1?'s':''} in the image — please review names, dosage and quantity before saving.`, 'success');
+    }
+  }catch(e){
+    console.error(e);
+    showToast(`Could not scan the image: ${e.message||e}`);
+  }
+  state.prescriptionScanLoading = false; render();
 };
 window.editVisit = async function(id){
   const v = state.data.visits.find(x=>x.id===id);
@@ -3740,6 +3769,12 @@ function viewAdminVisits(){
     ${medRows}
     <button class="btn btn-outline btn-small" onclick="addVisitMedRow()">+ Add medicine</button>
     <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">"From our pharmacy" deducts that quantity from Medicine Inventory automatically. "Prescribed externally" just records the medicine name for follow-up/ordering — no stock is deducted.</p>
+    <div class="field" style="margin-top:12px;">
+      <label>Or scan a prescription photo</label>
+      <input type="file" accept="image/*" capture="environment" onchange="scanPrescriptionImage(this)" ${state.prescriptionScanLoading?'disabled':''}>
+      ${state.prescriptionScanLoading?`<p class="mono" style="margin-top:6px;">🔎 Reading image…</p>`:''}
+      <p style="color:var(--text-muted);font-size:12px;margin:6px 0 0;">Photo/text recognition only — no AI interpretation. Works best on clear, printed prescriptions or medicine strip photos; always double-check the medicine name, dosage and quantity it fills in before saving.</p>
+    </div>
     <div class="row-actions" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveVisitForm()">${state.editingVisit?'Save changes':'Register visit'}</button>
       <button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>
