@@ -1539,7 +1539,7 @@ window.saveVisitForm = async function(){
   const outsideMeds = outsideRows.map(m=>({ source:'outside', name:m.name.trim(), quantity:m.quantity?Number(m.quantity):null, dosage:(m.dosage||'').trim() }));
   const medicines = [...pharmacyMeds, ...outsideMeds];
   if(medicines.length===0){
-    if(!confirm('No prescription or medicine details have been added for this visit.\n\nSave anyway?')) return;
+    if(!confirm('No prescription or medicine details have been added for this visit.\nഈ സന്ദർശനത്തിന് കുറിപ്പടിയോ മരുന്ന് വിവരങ്ങളോ ചേർത്തിട്ടില്ല.\n\nSave anyway? / എന്നിരുന്നാലും സേവ് ചെയ്യണോ?')) return;
   }
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
