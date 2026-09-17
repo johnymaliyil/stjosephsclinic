@@ -3414,11 +3414,12 @@ function vaccinationsDueAlertHtml(items){
   return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent);">
     <h3 style="margin-top:0;">💉 ${items.length} child${items.length>1?'ren':''} due for a vaccination</h3>
     <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;">Based on India's Universal Immunization Programme schedule and each child's date of birth — confirm timing with the doctor.</p>
-    <ul style="margin:0 0 10px;padding-left:18px;color:var(--text-muted);font-size:14px;">
-      ${items.slice(0,8).map(v=>`<li>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.vaccineLabel)}${v.daysOverdue>0?` (${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue)`:''}</li>`).join('')}
-      ${items.length>8?`<li>and ${items.length-8} more…</li>`:''}
-    </ul>
-    <div class="row-actions">
+    ${items.slice(0,8).map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(v.vaccineLabel)}${v.daysOverdue>0?` (${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue)`:''}</span></div>
+      ${v.patientPhone?`<button class="btn btn-outline btn-small" onclick="sendVaccinationReminder('${v.patientId}','${v.vaccineKey}')">Send reminder</button>`:''}
+    </div>`).join('')}
+    ${items.length>8?`<p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">and ${items.length-8} more…</p>`:''}
+    <div class="row-actions" style="margin-top:10px;">
       <button class="btn btn-outline btn-small" onclick="setView('admin-vaccinations')">View vaccinations</button>
     </div>
   </div>`;
@@ -3575,6 +3576,15 @@ window.sendFollowUpReminder = function(patientId){
   if(!v || !v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
   const i = state.data.info;
   const msg = `Hi ${v.patientName||'there'}, this is ${i.clinicName}. It's been a while since your last diabetes check-up — please book a follow-up visit when convenient. You can reply here or call us at ${i.phone}.`;
+  window.open(waLinkWithText(v.patientPhone, msg), '_blank');
+};
+window.sendVaccinationReminder = function(patientId, vaccineKey){
+  const v = (state.vaccinationsDue||[]).find(x=>x.patientId===patientId && x.vaccineKey===vaccineKey);
+  if(!v){ return; }
+  if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  const i = state.data.info;
+  const overdueNote = v.daysOverdue>0 ? ` This is ${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue.` : '';
+  const msg = `Hi, this is ${i.clinicName}. Your child ${v.patientName||''} (OPD ${v.patientOpdNo||''}) is due for the next vaccination: ${v.vaccineLabel}.${overdueNote} Please visit us at your convenience, or call ${i.phone} to schedule.`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
 function viewAdminDashboard(){
@@ -3886,7 +3896,10 @@ function viewAdminVaccinations(){
     <h3 style="margin-top:0;">💉 ${due.length} child${due.length>1?'ren':''} due</h3>
     ${due.map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
       <div><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">${escapeHtml(v.vaccineLabel)}${v.daysOverdue>0?` — ${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue`:''}</span></div>
-      <button class="btn btn-outline btn-small" onclick="recordDueVaccination('${v.patientId}','${v.vaccineKey}')">Record now</button>
+      <div class="row-actions">
+        ${v.patientPhone?`<button class="btn btn-outline btn-small" onclick="sendVaccinationReminder('${v.patientId}','${v.vaccineKey}')">Send reminder</button>`:''}
+        <button class="btn btn-outline btn-small" onclick="recordDueVaccination('${v.patientId}','${v.vaccineKey}')">Record now</button>
+      </div>
     </div>`).join('')}
   </div>` : '';
   const rows = state.data.vaccinations.map(v=>`<tr>
