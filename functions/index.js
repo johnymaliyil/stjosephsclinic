@@ -7,7 +7,6 @@ const db = admin.firestore();
 
 const WHATSAPP_TOKEN = defineSecret("WHATSAPP_TOKEN");
 const WHATSAPP_PHONE_NUMBER_ID = defineSecret("WHATSAPP_PHONE_NUMBER_ID");
-const VISION_API_KEY = defineSecret("VISION_API_KEY");
 
 const GRAPH_VERSION = "v21.0";
 const SEND_CHUNK_SIZE = 20;
@@ -56,82 +55,6 @@ async function sendTemplateMessage(url, token, to, templateName, languageCode, b
   }
   return json;
 }
-
-// Heuristic split of raw OCR text into medicine name + dosage pairs. This is plain
-// text-pattern matching (no AI interpretation), so results are approximate and the
-// client always presents them as an editable draft for staff to review before saving.
-function parsePrescriptionText(text) {
-  const NOISE_LINE = /^(dr\.?\s|date\s*[:.]|name\s*[:.]|age\s*[:.]|address\s*[:.]|opd\s*no|patient\s*[:.]|clinic|signature|reg\.?\s*no|mobile|phone)/i;
-  const DOSAGE_PATTERN = /(\d+\s*-\s*\d+\s*-\s*\d+|\d+(\.\d+)?\s*(mg|mcg|ml|gm|g)\b|\d+\s*(tab|tabs|cap|caps)\b)/i;
-  const DOSAGE_WORDS = /\b(OD|BD|TDS|QID|HS|SOS|stat|once\s+daily|twice\s+daily|thrice\s+daily|every\s+\d+\s*h(ou)?rs?|for\s+\d+\s*days?)\b/i;
-  const LEADING_MARKER = /^[-•*]\s*|^\d+[.)]\s*/;
-  const DRUG_PREFIX = /^(tab\.?|cap\.?|syp\.?|inj\.?|tablet|capsule|syrup|injection)\s+/i;
-
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const medicines = [];
-  for (const rawLine of lines) {
-    const line = rawLine.replace(LEADING_MARKER, "").trim();
-    if (line.length < 3 || line.length > 80) continue;
-    if (NOISE_LINE.test(line)) continue;
-    if (/^\d+$/.test(line)) continue;
-
-    const dosageMatch = line.match(DOSAGE_PATTERN) || line.match(DOSAGE_WORDS);
-    let name;
-    let dosage;
-    if (dosageMatch && dosageMatch.index > 0) {
-      name = line.slice(0, dosageMatch.index).trim();
-      dosage = line.slice(dosageMatch.index).trim();
-    } else if (dosageMatch) {
-      // Dosage instruction with no medicine name on the same line -- can't attribute it.
-      continue;
-    } else {
-      // No dosage signal -- only keep as a bare name line if it looks name-like.
-      if (!/^[A-Za-z][A-Za-z0-9.\-/\s]{2,}$/.test(line)) continue;
-      name = line;
-      dosage = "";
-    }
-    name = name.replace(DRUG_PREFIX, "").replace(/[-:,]\s*$/, "").trim();
-    if (!name || name.length < 2) continue;
-    medicines.push({ name, dosage });
-  }
-  return medicines.slice(0, 15);
-}
-
-exports.extractPrescriptionFromImage = onCall(
-  { secrets: [VISION_API_KEY], timeoutSeconds: 60, memory: "256MiB" },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Admin login required.");
-    }
-    const imageBase64 = (request.data && request.data.imageBase64) || "";
-    if (!imageBase64) {
-      throw new HttpsError("invalid-argument", "imageBase64 is required.");
-    }
-    const apiKey = VISION_API_KEY.value();
-    const url = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
-    const body = {
-      requests: [
-        {
-          image: { content: imageBase64 },
-          features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-        },
-      ],
-    };
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json().catch(() => ({}));
-    const first = json.responses && json.responses[0];
-    if (!res.ok || (first && first.error)) {
-      const msg = (first && first.error && first.error.message) || `HTTP ${res.status}`;
-      throw new HttpsError("internal", `Vision API error: ${msg}`);
-    }
-    const rawText = (first && first.fullTextAnnotation && first.fullTextAnnotation.text) || "";
-    return { medicines: parsePrescriptionText(rawText), rawText };
-  }
-);
 
 exports.sendWhatsAppCampaign = onCall(
   { secrets: [WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID], timeoutSeconds: 540, memory: "256MiB" },
