@@ -575,7 +575,7 @@ let state = {
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
-  medSearch:'', editingPatient:null, editingMed:null,
+  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
@@ -1227,7 +1227,7 @@ async function loadPatientsPage(reset){
 window.setPatientSearchField = function(v){ state.patientsSearchField=v; lastVisibleDoc=null; loadPatientsPage(true); };
 window.setPatientSearchTerm = function(v){ state.patientsSearchTerm=v; lastVisibleDoc=null; loadPatientsPage(true); };
 window.loadMorePatients = function(){ loadPatientsPage(false); };
-window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); render(); window.scrollTo(0,0); };
+window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); state.patientFormErrors=null; render(); window.scrollTo(0,0); };
 window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await loadPatientsPage(true); };
 window.savePatientForm = async function(){
   const opdNo=document.getElementById('pf-opd').value.trim();
@@ -1237,13 +1237,21 @@ window.savePatientForm = async function(){
   const age=document.getElementById('pf-age').value;
   const dob=document.getElementById('pf-dob').value;
   const address=document.getElementById('pf-address').value.trim();
-  if(!name || !opdNo){ showToast('OPD number and patient name are required. / OPD നമ്പറും രോഗിയുടെ പേരും നിർബന്ധമാണ്.'); return; }
+  if(!name || !opdNo){
+    state.patientFormErrors = { opdNo:!opdNo, name:!name };
+    showToast('OPD number and patient name are required. / OPD നമ്പറും രോഗിയുടെ പേരും നിർബന്ധമാണ്.');
+    render();
+    return;
+  }
   const dupSnap = await getDocs(query(collection(db,'patients'), where('opdNo','==',opdNo), limit(1)));
   const dup = dupSnap.docs[0];
   if(dup && (!state.editingPatient || dup.id!==state.editingPatient.id)){
+    state.patientFormErrors = { opdNo:true, name:false };
     showToast(`OPD No. ${opdNo} is already registered to ${dup.data().name}. Please use a different number. / ഈ OPD നമ്പർ ഇതിനകം ഉപയോഗത്തിലുണ്ട്.`);
+    render();
     return;
   }
+  state.patientFormErrors = null;
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
     phone, gender, age, dob, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
   const wasEditing = !!state.editingPatient;
@@ -1341,6 +1349,7 @@ window.registerOldVisit = async function(patientId){
 function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
+  state.visitFormErrors = null;
   state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false };
 }
 async function loadLastVitals(patientId){
@@ -1463,6 +1472,7 @@ window.editVisit = async function(id){
   const v = state.data.visits.find(x=>x.id===id);
   if(!v) return;
   state.editingVisit = v;
+  state.visitFormErrors = null;
   state.visitForm = {
     patientQuery:'', patientResults:[], patientSearchField:'name',
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
@@ -1491,7 +1501,12 @@ window.deleteVisit = async function(id){
 };
 window.saveVisitForm = async function(){
   const f = state.visitForm;
-  if(!f.selectedPatient){ showToast('Please select a patient for this visit. / ഈ സന്ദർശനത്തിനായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
+  if(!f.selectedPatient){
+    state.visitFormErrors = { selectedPatient:true };
+    showToast('Please select a patient for this visit. / ഈ സന്ദർശനത്തിനായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.');
+    render();
+    return;
+  }
   const date = document.getElementById('vf-date').value;
   const reason = document.getElementById('vf-reason').value.trim();
   const doctorName = document.getElementById('vf-doctor').value;
@@ -1500,7 +1515,13 @@ window.saveVisitForm = async function(){
   const bp = document.getElementById('vf-bp').value.trim();
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
-  if(!date){ showToast('Please choose a visit date. / ദയവായി സന്ദർശന തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
+  if(!date){
+    state.visitFormErrors = { date:true };
+    showToast('Please choose a visit date. / ദയവായി സന്ദർശന തീയതി തിരഞ്ഞെടുക്കുക.');
+    render();
+    return;
+  }
+  state.visitFormErrors = null;
   const vitalsWarnings = pediatricVitalsWarnings(f.selectedPatient.age, weight, height);
   if(vitalsWarnings.length){
     alert(['⚠️ Please inform the patient/parent before they leave: / ദയവായി രോഗി/രക്ഷിതാവ് പോകുന്നതിന് മുൻപ് ഇത് അറിയിക്കുക:', '', ...vitalsWarnings].join('\n\n'));
@@ -3427,7 +3448,7 @@ function viewAdminLogin(){
 /* ---------- admin shell ---------- */
 function adminNavItems(){
   return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-vaccinations','Vaccinations'],['admin-reports','Reports'],
-    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-cleanliness','Cleanliness Reports'],['admin-backup','Backup / Export'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+    ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-cleanliness','Cleanliness Reports'],['admin-backup','Backup / Export'],['admin-help','Help / സഹായം'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
 }
 function adminShell(content){
   return `<div class="admin-shell">
@@ -3684,11 +3705,16 @@ function viewAdminDashboard(){
 function viewAdminPatients(){
   const p=state.editingPatient;
   const showForm = p || state.showPatientForm;
-  const formCard=!showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showPatientForm=true; render();">+ New OPD registration</button></div>` : `<div class="card" style="margin-bottom:20px;">
+  const pfe = state.patientFormErrors;
+  const formCard=!showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showPatientForm=true; state.patientFormErrors=null; render();">+ New OPD registration</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${p?'Edit patient':'New OPD registration'}</h3>
     <div class="form-grid">
-      <div class="field"><label>OPD No.</label><input id="pf-opd" type="text" value="${escapeHtml(p?p.opdNo:state.nextOpdNoCache)}"></div>
-      <div class="field"><label>Patient name</label><input id="pf-name" type="text" value="${escapeHtml(p?p.name:'')}"></div>
+      <div class="field"><label>OPD No.</label><input id="pf-opd" type="text" value="${escapeHtml(p?p.opdNo:state.nextOpdNoCache)}" style="${pfe&&pfe.opdNo?'border-color:var(--danger);':''}">
+        ${pfe&&pfe.opdNo?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി OPD നമ്പർ നൽകുക</p>`:''}
+      </div>
+      <div class="field"><label>Patient name</label><input id="pf-name" type="text" value="${escapeHtml(p?p.name:'')}" style="${pfe&&pfe.name?'border-color:var(--danger);':''}">
+        ${pfe&&pfe.name?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി പേര് നൽകുക</p>`:''}
+      </div>
       <div class="field"><label>Phone</label><input id="pf-phone" type="text" value="${escapeHtml(p?p.phone:'')}"></div>
       <div class="field"><label>Gender</label><select id="pf-gender">${['Male','Female','Other'].map(g=>`<option ${p&&p.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field"><label>Age</label><input id="pf-age" type="number" min="0" value="${p?p.age:''}"></div>
@@ -3699,7 +3725,7 @@ function viewAdminPatients(){
     </div>
     <div class="row-actions" style="margin-top:6px;">
       <button class="btn btn-primary" onclick="savePatientForm()">${p?'Save changes':'Register patient'}</button>
-      <button class="btn btn-outline" onclick="state.editingPatient=null; state.showPatientForm=false; render();">Cancel</button>
+      <button class="btn btn-outline" onclick="state.editingPatient=null; state.showPatientForm=false; state.patientFormErrors=null; render();">Cancel</button>
     </div></div>`;
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
@@ -3751,13 +3777,14 @@ function viewAdminVisits(){
         </div>
       </div>`
     : `<div>
-        <div class="search-row">
+        <div class="search-row" style="${state.visitFormErrors&&state.visitFormErrors.selectedPatient?'border:1px solid var(--danger);border-radius:8px;padding:6px;':''}">
           <select onchange="setVisitPatientSearchField(this.value)">
             <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
             <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
           </select>
           <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)">
         </div>
+        ${state.visitFormErrors&&state.visitFormErrors.selectedPatient?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക</p>`:''}
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
   const medOptions = state.data.medicines.slice().sort((a,b)=>a.name.localeCompare(b.name));
@@ -3787,7 +3814,7 @@ function viewAdminVisits(){
   }).join('');
   const doctorOptions = (state.data.info.doctors||[]).map(d=>`<option value="${escapeHtml(d.name)}" ${f.doctorName===d.name?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
   const showForm = state.editingVisit || state.showVisitForm;
-  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
+  const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; state.visitFormErrors=null; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
     ${f.selectedPatient ? `<div class="field">
@@ -3795,7 +3822,9 @@ function viewAdminVisits(){
       ${f.showPreviousVisits ? previousVisitsHtml(f.previousVisits) : ''}
     </div>` : ''}
     <div class="form-grid">
-      <div class="field"><label>Visit date</label><input id="vf-date" type="date" value="${escapeHtml(f.date)}"></div>
+      <div class="field"><label>Visit date</label><input id="vf-date" type="date" value="${escapeHtml(f.date)}" style="${state.visitFormErrors&&state.visitFormErrors.date?'border-color:var(--danger);':''}">
+        ${state.visitFormErrors&&state.visitFormErrors.date?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി തീയതി തിരഞ്ഞെടുക്കുക</p>`:''}
+      </div>
       <div class="field"><label>Doctor</label><select id="vf-doctor"><option value="">— Not specified —</option>${doctorOptions}</select></div>
     </div>
     <div class="field"><label>Reason for visit</label><textarea id="vf-reason" rows="2">${escapeHtml(f.reason)}</textarea></div>
@@ -4636,6 +4665,52 @@ function viewAdminCleanliness(){
     ${(!state.cleanlinessReportsLoading && state.hasMoreCleanlinessReports) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreCleanlinessReports()">Load 20 more</button></div>` : ''}
   `);
 }
+function viewAdminHelp(){
+  const guides = [
+    { icon:'🧑‍🤝‍🧑', title:'Register a new patient / പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
+      'Go to "Patients (OPD)" and click "+ New OPD registration". / "Patients (OPD)" എന്നതിൽ പോയി "+ New OPD registration" ക്ലിക്ക് ചെയ്യുക.',
+      'OPD No. is filled in automatically — check the patient\'s name and phone number carefully. / OPD നമ്പർ താനേ വരും — പേരും ഫോൺ നമ്പറും ശ്രദ്ധയോടെ പരിശോധിക്കുക.',
+      'Click "Register patient" to save. / സേവ് ചെയ്യാൻ "Register patient" ക്ലിക്ക് ചെയ്യുക.'
+    ]},
+    { icon:'🩺', title:'Register a visit / സന്ദർശനം രേഖപ്പെടുത്തുക', steps:[
+      'Go to "Patient Visits" and click "+ Register visit". / "Patient Visits" എന്നതിൽ പോയി "+ Register visit" ക്ലിക്ക് ചെയ്യുക.',
+      'Search the patient by name or OPD number and select them. / പേര് അല്ലെങ്കിൽ OPD നമ്പർ ഉപയോഗിച്ച് രോഗിയെ തിരഞ്ഞെടുക്കുക.',
+      'Fill in the reason, vitals (if taken) and any medicines prescribed. / കാരണം, വൈറ്റൽസ്, നിർദ്ദേശിച്ച മരുന്നുകൾ എന്നിവ ചേർക്കുക.',
+      'Click "Register visit" to save. If weight/height looks unusual for the child\'s age, a popup will remind you to tell the parent. / "Register visit" ക്ലിക്ക് ചെയ്യുക. കുട്ടിയുടെ പ്രായത്തിന് ഭാരം/ഉയരം പൊരുത്തമില്ലെങ്കിൽ, രക്ഷിതാവിനെ അറിയിക്കാൻ ഒരു അറിയിപ്പ് വരും.'
+    ]},
+    { icon:'🧾', title:'Create a bill / ബിൽ ഉണ്ടാക്കുക', steps:[
+      'Go to "Billing" and click "+ New bill". / "Billing" എന്നതിൽ പോയി "+ New bill" ക്ലിക്ക് ചെയ്യുക.',
+      'Search for the patient\'s visit (it must already be registered under Patient Visits). / "Patient Visits" ൽ രേഖപ്പെടുത്തിയ സന്ദർശനം തിരഞ്ഞെടുക്കുക.',
+      'Check the medicines and amounts, add any extra service charges, and choose Cash or UPI. / മരുന്നുകളും തുകയും പരിശോധിച്ച്, വേണമെങ്കിൽ കൂടുതൽ ചാർജ്ജ് ചേർത്ത്, Cash അല്ലെങ്കിൽ UPI തിരഞ്ഞെടുക്കുക.',
+      'Click "Save & Print". Made a mistake? Every bill has an "Edit" button to correct it later. / "Save & Print" ക്ലിക്ക് ചെയ്യുക. തെറ്റ് വന്നാൽ, ഓരോ ബില്ലിലും ഉള്ള "Edit" ബട്ടൺ ഉപയോഗിച്ച് പിന്നീട് തിരുത്താം.'
+    ]},
+    { icon:'💉', title:'Record a vaccination / വാക്സിനേഷൻ രേഖപ്പെടുത്തുക', steps:[
+      'Go to "Vaccinations" and click "+ Record a vaccination". / "Vaccinations" എന്നതിൽ പോയി "+ Record a vaccination" ക്ലിക്ക് ചെയ്യുക.',
+      'Select the patient and the vaccine given. For Vitamin A/D, deworming, or anything not in the list, choose "Other" and type it in. / രോഗിയെയും വാക്സിനെയും തിരഞ്ഞെടുക്കുക. Vitamin A/D പോലുള്ളവയ്ക്ക് "Other" തിരഞ്ഞെടുത്ത് ടൈപ്പ് ചെയ്യുക.',
+      'Set the date it was actually given and click "Save". / കൊടുത്ത തീയതി നൽകി "Save" ക്ലിക്ക് ചെയ്യുക.'
+    ]},
+    { icon:'🖨️', title:'Print or send a patient\'s full history / രോഗിയുടെ മുഴുവൻ ചരിത്രം പ്രിന്റ് ചെയ്യുക / അയയ്ക്കുക', steps:[
+      'From "Patient Visits", click "History" next to any visit row, or "Visits" from the Patients page then "Print full history". / "Patient Visits" ൽ ഏതെങ്കിലും വരിയിലെ "History" ക്ലിക്ക് ചെയ്യുക, അല്ലെങ്കിൽ Patients പേജിൽ നിന്ന് "Visits" → "Print full history".',
+      'This opens a printable page with every visit for that patient. / ഇത് ആ രോഗിയുടെ എല്ലാ സന്ദർശനങ്ങളും ഉള്ള ഒരു പ്രിന്റ് ചെയ്യാവുന്ന പേജ് തുറക്കും.',
+      '"Notify doctor" sends the same history to the doctor over WhatsApp instead of printing. / "Notify doctor" ഇത് പ്രിന്റ് ചെയ്യാതെ ഡോക്ടർക്ക് വാട്സ്ആപ്പിൽ അയയ്ക്കും.'
+    ]},
+    { icon:'🕒', title:'Add an old visit for a patient / പഴയ ഒരു സന്ദർശനം ചേർക്കുക', steps:[
+      'From "Patient Visits", search and open a patient\'s visit list, then click "🕒 Register old visit". / "Patient Visits" ൽ രോഗിയുടെ സന്ദർശന ലിസ്റ്റ് തുറന്ന് "🕒 Register old visit" ക്ലിക്ക് ചെയ്യുക.',
+      'The patient is already selected — just change the date to the old date and fill in the details. / രോഗി നേരത്തെ തന്നെ തിരഞ്ഞെടുത്തിരിക്കും — തീയതി മാറ്റി ബാക്കി വിവരങ്ങൾ ചേർക്കുക.'
+    ]}
+  ];
+  const cards = guides.map(g=>`<div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">${g.icon} ${escapeHtml(g.title)}</h3>
+    <ol style="margin:0;padding-left:20px;color:var(--text);font-size:14px;line-height:1.7;">
+      ${g.steps.map(s=>`<li style="margin-bottom:6px;">${escapeHtml(s)}</li>`).join('')}
+    </ol>
+  </div>`).join('');
+  return adminShell(`
+    <h2 class="display">Help / സഹായം</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Quick step-by-step guides for the most common daily tasks. / ദിവസവും ചെയ്യുന്ന പ്രധാന കാര്യങ്ങൾക്കുള്ള ലളിതമായ വഴികാട്ടി.</p>
+    ${cards}
+  `);
+}
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
   const items = [
@@ -4771,6 +4846,7 @@ function render(){
       case 'admin-purchases': html=viewAdminPurchases(); break;
       case 'admin-appointments': html=viewAdminAppointments(); break;
       case 'admin-backup': html=viewAdminBackup(); break;
+      case 'admin-help': html=viewAdminHelp(); break;
       case 'admin-info': html=viewAdminInfo(); break;
       case 'admin-blog': html=viewAdminBlog(); break;
       case 'feedback': html=viewFeedback(); break;
