@@ -589,7 +589,7 @@ let state = {
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
   vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[],
-  vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, date:todayISO(), notes:'' },
+  vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
   patientsReportLoading:false, reportPatients:[],
@@ -2291,7 +2291,7 @@ window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; 
 window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
 function resetVaccinationForm(){
   state.showVaccinationForm = false;
-  state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, date:todayISO(), notes:'' };
+  state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' };
 }
 window.setVaccinationPatientSearchField = function(field){
   state.vaccinationForm.patientSearchField = field;
@@ -2324,6 +2324,7 @@ window.recordDueVaccination = function(patientId, vaccineKey){
   state.showVaccinationForm = true;
   state.vaccinationForm.selectedPatient = { id:due.patientId, name:due.patientName, opdNo:due.patientOpdNo, phone:due.patientPhone };
   state.vaccinationForm.vaccineKey = due.vaccineKey;
+  state.vaccinationForm.customVaccineName = '';
   render(); window.scrollTo(0,0);
 };
 window.deleteVaccination = async function(id){
@@ -2336,12 +2337,19 @@ window.saveVaccinationForm = async function(){
   if(!f.selectedPatient){ showToast('Please select a patient.'); return; }
   const date = document.getElementById('vac-date').value;
   const notes = document.getElementById('vac-notes').value.trim();
-  if(!date){ showToast('Please choose a date.'); return; }
-  const scheduleItem = VACCINE_SCHEDULE.find(v=>v.key===f.vaccineKey);
+  if(!date){ showToast('Please choose a date. / ദയവായി തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
+  let vaccineLabel;
+  if(f.vaccineKey==='custom'){
+    vaccineLabel = (f.customVaccineName||'').trim();
+    if(!vaccineLabel){ showToast('Please enter what this is (e.g. Vitamin A, Vitamin D, deworming). / ദയവായി ഇത് എന്താണെന്ന് നൽകുക.'); return; }
+  }else{
+    const scheduleItem = VACCINE_SCHEDULE.find(v=>v.key===f.vaccineKey);
+    vaccineLabel = scheduleItem?scheduleItem.label:f.vaccineKey;
+  }
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
-    vaccineKey:f.vaccineKey, vaccineLabel: scheduleItem?scheduleItem.label:f.vaccineKey,
+    vaccineKey:f.vaccineKey, vaccineLabel,
     date, notes, createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
   try{
@@ -3895,10 +3903,12 @@ function viewAdminVaccinations(){
     <div class="field"><label>Patient</label>${patientBlock}</div>
     <div class="form-grid">
       <div class="field" style="grid-column:1/-1;"><label>Vaccine / milestone</label>
-        <select onchange="state.vaccinationForm.vaccineKey=this.value;">
+        <select onchange="state.vaccinationForm.vaccineKey=this.value; render();">
           ${VACCINE_SCHEDULE.map(v=>`<option value="${v.key}" ${f.vaccineKey===v.key?'selected':''}>${escapeHtml(v.label)}</option>`).join('')}
+          <option value="custom" ${f.vaccineKey==='custom'?'selected':''}>Other (Vitamin A, Vitamin D, deworming, etc. — specify below)</option>
         </select>
       </div>
+      ${f.vaccineKey==='custom' ? `<div class="field" style="grid-column:1/-1;"><label>Specify</label><input type="text" placeholder="e.g. Vitamin A (1st dose)" value="${escapeHtml(f.customVaccineName)}" onchange="state.vaccinationForm.customVaccineName=this.value;"></div>` : ''}
       <div class="field"><label>Date given</label><input id="vac-date" type="date" value="${escapeHtml(f.date)}"></div>
     </div>
     <div class="field"><label>Notes (optional)</label><textarea id="vac-notes" rows="2">${escapeHtml(f.notes)}</textarea></div>
