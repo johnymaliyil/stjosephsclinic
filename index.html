@@ -581,7 +581,7 @@ let state = {
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
   editingVisit:null,
-  billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false,
+  billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false, editingBill:null,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
   billingPrefillVisit:null,
   labRecordPrefillVisit:null,
@@ -1760,6 +1760,7 @@ window.clearBillsPatientFilter = function(){
 
 function resetBillForm(){
   state.showBillForm = false;
+  state.editingBill = null;
   state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash', registrationFeePatientId:null, consultationFeeNote:null };
 }
 async function loadLastPaidConsultation(patientId){
@@ -1886,7 +1887,8 @@ window.saveBillForm = async function(){
   }));
   const totals = billTotals({...f, medItems, extraItems});
   const v = f.selectedVisit;
-  const billNumber = await computeNextBillNumber();
+  const editing = state.editingBill;
+  const billNumber = editing ? editing.billNumber : await computeNextBillNumber();
 
   // Stock for medicines already prescribed on the visit was deducted when the visit was
   // saved. Only the difference between the bill's final quantities and the visit's original
@@ -1909,15 +1911,29 @@ window.saveBillForm = async function(){
     medTotal:totals.medTotal, extraTotal:totals.extraTotal, grandTotal:totals.grandTotal,
     paymentMethod: f.paymentMethod==='upi' ? 'upi' : 'cash',
     inventoryDelta,
-    date:todayISO(), createdAtMillis:Date.now(), createdAt:new Date().toISOString()
+    date: editing ? editing.date : todayISO(),
+    createdAtMillis: editing ? editing.createdAtMillis : Date.now(),
+    createdAt: editing ? editing.createdAt : new Date().toISOString()
   };
-  const registrationFeeKept = f.registrationFeePatientId && f.extraItems.some(x=>x.isRegistrationFee && x.description && Number(x.amount)>0);
+  if(editing) data.updatedAt = new Date().toISOString();
+  const registrationFeeKept = !editing && f.registrationFeePatientId && f.extraItems.some(x=>x.isRegistrationFee && x.description && Number(x.amount)>0);
 
-  const ref = doc(collection(db,'bills'));
+  const ref = editing ? doc(db,'bills',editing.id) : doc(collection(db,'bills'));
   const batch = writeBatch(db);
-  batch.set(ref, data);
-  batch.update(doc(db,'visits',v.id), {billId:ref.id, billNumber});
-  Object.entries(inventoryDelta).forEach(([medId,delta])=>{ batch.update(doc(db,'medicines',medId), {quantity:increment(-delta)}); });
+  if(editing){
+    batch.update(ref, data);
+    // Net stock adjustment vs. what this bill had already deducted -- not the full
+    // inventoryDelta, since that was already applied when this bill was first saved.
+    const oldDelta = editing.inventoryDelta || {};
+    new Set([...Object.keys(oldDelta), ...Object.keys(inventoryDelta)]).forEach(medId=>{
+      const net = (inventoryDelta[medId]||0) - (oldDelta[medId]||0);
+      if(net) batch.update(doc(db,'medicines',medId), {quantity:increment(-net)});
+    });
+  }else{
+    batch.set(ref, data);
+    batch.update(doc(db,'visits',v.id), {billId:ref.id, billNumber});
+    Object.entries(inventoryDelta).forEach(([medId,delta])=>{ batch.update(doc(db,'medicines',medId), {quantity:increment(-delta)}); });
+  }
   if(registrationFeeKept){ batch.update(doc(db,'patients',f.registrationFeePatientId), {registrationFeeCharged:true}); }
   try{
     await batch.commit();
@@ -1928,8 +1944,8 @@ window.saveBillForm = async function(){
   }
   resetBillForm();
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
-  showToast('👍 Bill saved!', 'success'); render();
-  sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
+  showToast(editing?'👍 Bill updated!':'👍 Bill saved!', 'success'); render();
+  if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
   printBill({id:ref.id, ...data});
 };
 window.deleteBill = async function(id){
@@ -1944,6 +1960,29 @@ window.deleteBill = async function(id){
     await batch.commit();
   }catch(e){ console.error(e); showToast('Could not delete bill.'); return; }
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
+};
+window.editBill = async function(id){
+  const b = state.data.bills.find(x=>x.id===id);
+  if(!b) return;
+  let visit = null;
+  if(b.visitId){
+    try{
+      const snap = await getDoc(doc(db,'visits',b.visitId));
+      if(snap.exists()) visit = { id:snap.id, ...snap.data() };
+    }catch(e){ console.error('Could not load the original visit for this bill', e); }
+  }
+  state.editingBill = b;
+  state.billForm = {
+    visitQuery:'', visitResults:[], visitSearchField:'name',
+    selectedVisit: visit || { id:b.visitId||'', patientId:b.patientId, patientName:b.patientName, patientOpdNo:b.patientOpdNo, patientPhone:b.patientPhone, date:b.visitDate, medicines:[] },
+    consultationFee: b.consultationFee||0,
+    medItems: (b.medItems||[]).map(m=>({...m})),
+    extraItems: (b.extraItems&&b.extraItems.length)? b.extraItems.map(x=>({...x})) : [{description:'',amount:''}],
+    paymentMethod: b.paymentMethod==='upi' ? 'upi' : 'cash',
+    registrationFeePatientId:null, consultationFeeNote:null
+  };
+  state.showBillForm = true;
+  render(); window.scrollTo(0,0);
 };
 window.printBillById = async function(id){
   let b = state.data.bills.find(x=>x.id===id);
@@ -3931,7 +3970,7 @@ function viewAdminBilling(){
   const visitBlock = f.selectedVisit
     ? `<div class="card" style="margin-bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <div><strong>${escapeHtml(f.selectedVisit.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(f.selectedVisit.patientOpdNo||'')}</span><br><span style="color:var(--text-muted);font-size:13px;">Visit ${escapeHtml(f.selectedVisit.date||'')} — ${escapeHtml(f.selectedVisit.reason||'')}</span></div>
-        <button class="btn btn-outline btn-small" onclick="clearBillVisit()">Change</button>
+        ${state.editingBill ? '' : `<button class="btn btn-outline btn-small" onclick="clearBillVisit()">Change</button>`}
       </div>`
     : `<div>
         <div class="search-row">
@@ -3964,7 +4003,7 @@ function viewAdminBilling(){
     </div>`).join('');
   const totals = billTotals(f);
   const formCard = !state.showBillForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showBillForm=true; render();">+ New bill</button></div>` : `<div class="card" style="margin-bottom:20px;">
-    <h3 style="margin-top:0;">New bill</h3>
+    <h3 style="margin-top:0;">${state.editingBill?'Edit bill':'New bill'}</h3>
     <div class="field"><label>Patient visit</label>${visitBlock}</div>
     <label>Medicines</label>
     ${medRows || `<p style="color:var(--text-muted);font-size:13px;">No medicines yet — select a visit above, or add one.</p>`}
@@ -3993,7 +4032,7 @@ function viewAdminBilling(){
       <div class="display" style="font-size:22px;color:var(--primary-dark);">Total: ₹${totals.grandTotal.toFixed(2)}</div>
     </div>
     <div class="row-actions" style="margin-top:14px;">
-      <button class="btn btn-primary" onclick="saveBillForm()">Save & Print</button>
+      <button class="btn btn-primary" onclick="saveBillForm()">${state.editingBill?'Save changes & Print':'Save & Print'}</button>
       <button class="btn btn-outline" onclick="resetBillForm(); render();">Cancel</button>
     </div>
   </div>`;
@@ -4002,7 +4041,7 @@ function viewAdminBilling(){
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
