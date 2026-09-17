@@ -235,11 +235,11 @@ const fbFunctions = getFunctions(fbApp);
 // working. Surface it instead, so it's visible without opening DevTools.
 window.addEventListener('error', (e)=>{
   console.error('Uncaught error:', e.error||e.message);
-  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.error&&e.error.message)||e.message||'unknown error'}. Please try again.`); }catch(_){}
+  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.error&&e.error.message)||e.message||'unknown error'}. Please try again. / എന്തോ പിശക് സംഭവിച്ചു, ഇത് സേവ് ആയിട്ടില്ലായിരിക്കാം. ദയവായി വീണ്ടും ശ്രമിക്കുക.`); }catch(_){}
 });
 window.addEventListener('unhandledrejection', (e)=>{
   console.error('Unhandled promise rejection:', e.reason);
-  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.reason&&e.reason.message)||e.reason||'unknown error'}. Please try again.`); }catch(_){}
+  try{ showToast(`⚠️ Something went wrong and this may not have saved: ${(e.reason&&e.reason.message)||e.reason||'unknown error'}. Please try again. / എന്തോ പിശക് സംഭവിച്ചു, ഇത് സേവ് ആയിട്ടില്ലായിരിക്കാം. ദയവായി വീണ്ടും ശ്രമിക്കുക.`); }catch(_){}
 });
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -624,7 +624,7 @@ function pushViewHistory(){
 }
 window.goBackView = function(){
   const prev = viewHistory.pop();
-  if(!prev){ showToast('Nothing to go back to.'); return; }
+  if(!prev){ showToast('Nothing to go back to. / തിരികെ പോകാൻ ഒന്നുമില്ല.'); return; }
   skipNextHistoryPush = true;
   setView(prev);
 };
@@ -745,7 +745,7 @@ window.saveClinicInfo = async function(){
   await setDoc(infoRef, i);
   initEmailjs();
   initGoogleAnalytics();
-  showToast('Clinic info saved.');
+  showToast('Clinic info saved. / ക്ലിനിക്ക് വിവരങ്ങൾ സേവ് ചെയ്തു.');
 };
 window.doctorEditor = null; // placeholder, real fn below
 function doctorEditor(items){
@@ -786,10 +786,10 @@ window.addConsultationServices = async function(){
   ];
   const existing = new Set(state.data.info.services.map(s=>(s.name||'').trim().toLowerCase()));
   const missing = toAdd.filter(s=>!existing.has(s.name.toLowerCase()));
-  if(!missing.length){ showToast('Both services are already in your list.'); return; }
+  if(!missing.length){ showToast('Both services are already in your list. / രണ്ട് സേവനങ്ങളും ഇതിനകം ലിസ്റ്റിലുണ്ട്.'); return; }
   state.data.info.services.push(...missing);
   await setDoc(infoRef, state.data.info);
-  showToast(`Added ${missing.map(s=>s.name).join(' and ')}.`, 'success'); render();
+  showToast(`Added ${missing.map(s=>s.name).join(' and ')}. / ചേർത്തു.`, 'success'); render();
 };
 
 /* ---------- blog posts ---------- */
@@ -832,14 +832,14 @@ async function addSampleBlogPosts(list){
     await addDoc(collection(db,'blogPosts'), { ...list[idx], date: d.toISOString().slice(0,10) });
   }
   await loadBlogPosts();
-  showToast('👍 Sample posts added!', 'success'); render();
+  showToast('👍 Sample posts added! / സാമ്പിൾ പോസ്റ്റുകൾ ചേർത്തു!', 'success'); render();
 }
 window.loadSamplePosts = async function(){
-  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS.length} sample blog posts (English)? This won't remove your existing posts.`)) return;
+  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS.length} sample blog posts (English)? This won't remove your existing posts. / ${SAMPLE_BLOG_POSTS.length} സാമ്പിൾ ബ്ലോഗ് പോസ്റ്റുകൾ ചേർക്കണോ?`)) return;
   await addSampleBlogPosts(SAMPLE_BLOG_POSTS);
 };
 window.loadSampleMalayalamPosts = async function(){
-  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS_ML.length} sample blog posts (Malayalam)? This won't remove your existing posts.`)) return;
+  if(state.data.blogPosts.length && !confirm(`Add ${SAMPLE_BLOG_POSTS_ML.length} sample blog posts (Malayalam)? This won't remove your existing posts. / ${SAMPLE_BLOG_POSTS_ML.length} സാമ്പിൾ ബ്ലോഗ് പോസ്റ്റുകൾ (മലയാളം) ചേർക്കണോ?`)) return;
   await addSampleBlogPosts(SAMPLE_BLOG_POSTS_ML);
 };
 window.updateBlogPost = async function(id,key,val){ await updateDoc(doc(db,'blogPosts',id), {[key]:val}); const p=state.data.blogPosts.find(x=>x.id===id); if(p) p[key]=val; };
@@ -872,7 +872,7 @@ window.saveMedForm = async function(){
   if(state.editingMed){ await updateDoc(doc(db,'medicines',state.editingMed.id), data); state.editingMed=null; }
   else{ await addDoc(collection(db,'medicines'), data); }
   state.showMedForm=false;
-  await loadMedicines(); showToast('Inventory updated.'); render();
+  await loadMedicines(); showToast('Inventory updated. / ഇൻവെന്ററി അപ്ഡേറ്റ് ചെയ്തു.'); render();
 };
 
 /* ---------- medicine purchases ---------- */
@@ -889,7 +889,7 @@ async function loadPurchasesPage(reset){
     state.hasMorePurchases = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load purchases — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load purchases — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / പർച്ചേസുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല — സാങ്കേതിക പ്രശ്നമുണ്ടെങ്കിൽ അഡ്മിനെ അറിയിക്കുക.');
   }
   state.purchasesLoading = false; render();
 }
@@ -978,18 +978,18 @@ window.savePurchaseForm = async function(){
     await batch.commit();
   }catch(e){
     console.error(e);
-    showToast('Could not save purchase — check the browser console for details.');
+    showToast('Could not save purchase — check the browser console for details. / പർച്ചേസ് സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetPurchaseForm();
   lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines()]);
-  showToast('👍 Purchase recorded and inventory updated!', 'success'); render();
+  showToast('👍 Purchase recorded and inventory updated! / പർച്ചേസ് രേഖപ്പെടുത്തി, ഇൻവെന്ററി അപ്ഡേറ്റ് ചെയ്തു!', 'success'); render();
 };
 window.togglePurchasePayment = async function(id){
   const p = state.data.purchases.find(x=>x.id===id) || state.data.unpaidPurchases.find(x=>x.id===id);
   if(!p) return;
   const newStatus = p.paymentStatus==='paid' ? 'unpaid' : 'paid';
-  try{ await updateDoc(doc(db,'purchases',id), {paymentStatus:newStatus}); }catch(e){ console.error(e); showToast('Could not update payment status.'); return; }
+  try{ await updateDoc(doc(db,'purchases',id), {paymentStatus:newStatus}); }catch(e){ console.error(e); showToast('Could not update payment status. / പേയ്മെന്റ് സ്റ്റാറ്റസ് അപ്ഡേറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   p.paymentStatus = newStatus;
   await loadUnpaidPurchases(); render();
 };
@@ -1002,7 +1002,7 @@ window.deletePurchase = async function(id){
   batch.delete(doc(db,'purchases',id));
   try{
     await batch.commit();
-  }catch(e){ console.error(e); showToast('Could not delete purchase.'); return; }
+  }catch(e){ console.error(e); showToast('Could not delete purchase. / പർച്ചേസ് ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]);
 };
 
@@ -1040,7 +1040,7 @@ async function loadCleanlinessReportsPage(reset){
     state.hasMoreCleanlinessReports = snap.docs.length === 20;
   }catch(e){
     console.error(e);
-    showToast('Could not load cleanliness reports — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load cleanliness reports — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ശുചിത്വ റിപ്പോർട്ടുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.cleanlinessReportsLoading = false; render();
 }
@@ -1053,13 +1053,13 @@ window.handleCleanlinessPhotoFile = async function(input){
   const files = Array.from(input.files||[]);
   if(!files.length) return;
   const remaining = 3 - state.cleanlinessForm.photos.length;
-  if(remaining<=0){ showToast('You can attach up to 3 photos per report.'); input.value=''; return; }
+  if(remaining<=0){ showToast('You can attach up to 3 photos per report. / ഓരോ റിപ്പോർട്ടിനും പരമാവധി 3 ഫോട്ടോകൾ വരെ ചേർക്കാം.'); input.value=''; return; }
   state.cleanlinessPhotoProcessing = true; render();
   for(const file of files.slice(0, remaining)){
     try{
       const dataUri = await resizeImageFile(file, 800, 0.6);
       state.cleanlinessForm.photos.push(dataUri);
-    }catch(e){ console.error(e); showToast('Could not process one of the photos.'); }
+    }catch(e){ console.error(e); showToast('Could not process one of the photos. / ഒരു ഫോട്ടോ പ്രോസസ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); }
   }
   state.cleanlinessPhotoProcessing = false;
   input.value = '';
@@ -1068,8 +1068,8 @@ window.handleCleanlinessPhotoFile = async function(input){
 window.removeCleanlinessPhoto = function(idx){ state.cleanlinessForm.photos.splice(idx,1); render(); };
 window.saveCleanlinessReport = async function(){
   const f = state.cleanlinessForm;
-  if(!f.staffName){ showToast('Please select who is filing this report.'); return; }
-  if(!f.notes.trim() && !f.photos.length){ showToast('Add a note or at least one photo.'); return; }
+  if(!f.staffName){ showToast('Please select who is filing this report. / ഈ റിപ്പോർട്ട് സമർപ്പിക്കുന്നയാളെ തിരഞ്ഞെടുക്കുക.'); return; }
+  if(!f.notes.trim() && !f.photos.length){ showToast('Add a note or at least one photo. / ഒരു കുറിപ്പ് അല്ലെങ്കിൽ ഒരു ഫോട്ടോയെങ്കിലും ചേർക്കുക.'); return; }
   try{
     await addDoc(collection(db,'cleanlinessReports'), {
       staffName: f.staffName, area: f.area.trim(), rating: f.rating, notes: f.notes.trim(), photos: f.photos.slice(),
@@ -1077,16 +1077,16 @@ window.saveCleanlinessReport = async function(){
     });
   }catch(e){
     console.error(e);
-    showToast('Could not save the report — if it has photos, try fewer or smaller ones.');
+    showToast('Could not save the report — if it has photos, try fewer or smaller ones. / റിപ്പോർട്ട് സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetCleanlinessForm();
   lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true);
-  showToast('👍 Cleanliness report submitted!', 'success'); render();
+  showToast('👍 Cleanliness report submitted! / ശുചിത്വ റിപ്പോർട്ട് സമർപ്പിച്ചു!', 'success'); render();
 };
 window.deleteCleanlinessReport = async function(id){
   if(!confirm('Delete this cleanliness report? This cannot be undone.\nഈ ശുചിത്വ റിപ്പോർട്ട് ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
-  try{ await deleteDoc(doc(db,'cleanlinessReports',id)); }catch(e){ console.error(e); showToast('Could not delete report.'); return; }
+  try{ await deleteDoc(doc(db,'cleanlinessReports',id)); }catch(e){ console.error(e); showToast('Could not delete report. / റിപ്പോർട്ട് ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true);
 };
 
@@ -1109,13 +1109,13 @@ window.submitAppointment = async function(){
 window.updateAppointmentStatus = async function(id,status){
   await updateDoc(doc(db,'appointments',id), {status});
   const a=state.data.appointments.find(x=>x.id===id); if(a) a.status=status;
-  showToast('Status updated.');
+  showToast('Status updated. / സ്റ്റാറ്റസ് അപ്ഡേറ്റ് ചെയ്തു.');
 };
 window.deleteAppointment = async function(id){ await deleteDoc(doc(db,'appointments',id)); await loadAppointments(); render(); };
 window.sendAppointmentWhatsApp = function(id){
   const a = state.data.appointments.find(x=>x.id===id);
   if(!a) return;
-  if(!a.phone){ showToast('No phone number on file for this request.'); return; }
+  if(!a.phone){ showToast('No phone number on file for this request. / ഈ അഭ്യർത്ഥനയ്ക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const msg = `Hi ${a.name}, this is ${i.clinicName} regarding your ${a.consultationType||'appointment'} request${a.date?` for ${a.date}`:''}.`;
   window.open(waLinkWithText(a.phone, msg), '_blank');
@@ -1140,7 +1140,7 @@ window.deleteFeedback = async function(id){ await deleteDoc(doc(db,'feedback',id
 window.sendFeedbackWhatsApp = function(id){
   const f = state.data.feedback.find(x=>x.id===id);
   if(!f) return;
-  if(!f.phone){ showToast('No phone number on file for this feedback.'); return; }
+  if(!f.phone){ showToast('No phone number on file for this feedback. / ഈ ഫീഡ്ബാക്കിന് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   window.open(waLinkWithText(f.phone, `Hi ${f.name||'there'}, thank you for your feedback — ${i.clinicName}.`), '_blank');
 };
@@ -1165,25 +1165,25 @@ window.updateWhatsappBodyParam = function(idx, val){ state.whatsappForm.bodyPara
 window.sendWhatsappCampaign = async function(){
   const f = state.whatsappForm;
   const templateName = (f.templateName||'').trim();
-  if(!templateName){ showToast('Enter the exact name of your Meta-approved message template.'); return; }
+  if(!templateName){ showToast('Enter the exact name of your Meta-approved message template. / ദയവായി കൃത്യമായ ടെംപ്ലേറ്റ് പേര് നൽകുക.'); return; }
   const bodyParams = f.bodyParams.map(p=>p.trim()).filter(p=>p);
   const phones = f.audience==='custom'
     ? f.customPhones.split(/[\n,]/).map(p=>p.trim()).filter(p=>p)
     : [];
-  if(f.audience==='custom' && !phones.length){ showToast('Paste at least one phone number, or switch to "All patients".'); return; }
+  if(f.audience==='custom' && !phones.length){ showToast('Paste at least one phone number, or switch to "All patients". / ദയവായി ഒരു ഫോൺ നമ്പറെങ്കിലും നൽകുക.'); return; }
   if(!confirm(f.audience==='custom'
-    ? `Send the "${templateName}" template to ${phones.length} number(s)?`
-    : `Send the "${templateName}" template to every patient with a phone number on file?`)) return;
+    ? `Send the "${templateName}" template to ${phones.length} number(s)? / ${phones.length} നമ്പറുകളിലേക്ക് അയക്കണോ?`
+    : `Send the "${templateName}" template to every patient with a phone number on file? / എല്ലാ രോഗികൾക്കും അയക്കണോ?`)) return;
   state.whatsappSending = true; render();
   try{
     const call = httpsCallable(fbFunctions, 'sendWhatsAppCampaign', { timeout: 300000 });
     const res = await call({ templateName, templateLanguage: f.templateLanguage||'en_US', bodyParams, audience: f.audience, phones });
     const d = res.data || {};
-    showToast(`Campaign sent: ${d.successCount||0} delivered, ${d.failCount||0} failed, out of ${d.totalRecipients||0}.`, 'success');
+    showToast(`Campaign sent: ${d.successCount||0} delivered, ${d.failCount||0} failed, out of ${d.totalRecipients||0}. / കാമ്പെയ്ൻ അയച്ചു.`, 'success');
     state.whatsappForm = { templateName:'', templateLanguage:'en_US', bodyParams:[''], audience:'all', customPhones:'' };
     await loadWhatsappCampaigns();
   }catch(e){
-    showToast(`Could not send campaign: ${e.message||e}`);
+    showToast(`Could not send campaign: ${e.message||e} / കാമ്പെയ്ൻ അയക്കാൻ കഴിഞ്ഞില്ല.`);
   }
   state.whatsappSending = false; render();
 };
@@ -1220,7 +1220,7 @@ async function loadPatientsPage(reset){
     state.hasMorePatients = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load patients — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load patients — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / രോഗികളെ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.patientsLoading = false; render();
 }
@@ -1237,11 +1237,11 @@ window.savePatientForm = async function(){
   const age=document.getElementById('pf-age').value;
   const dob=document.getElementById('pf-dob').value;
   const address=document.getElementById('pf-address').value.trim();
-  if(!name || !opdNo){ showToast('OPD number and patient name are required.'); return; }
+  if(!name || !opdNo){ showToast('OPD number and patient name are required. / OPD നമ്പറും രോഗിയുടെ പേരും നിർബന്ധമാണ്.'); return; }
   const dupSnap = await getDocs(query(collection(db,'patients'), where('opdNo','==',opdNo), limit(1)));
   const dup = dupSnap.docs[0];
   if(dup && (!state.editingPatient || dup.id!==state.editingPatient.id)){
-    showToast(`OPD No. ${opdNo} is already registered to ${dup.data().name}. Please use a different number.`);
+    showToast(`OPD No. ${opdNo} is already registered to ${dup.data().name}. Please use a different number. / ഈ OPD നമ്പർ ഇതിനകം ഉപയോഗത്തിലുണ്ട്.`);
     return;
   }
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
@@ -1251,7 +1251,7 @@ window.savePatientForm = async function(){
   else{ await addDoc(collection(db,'patients'), {...data, registrationFeeCharged:false}); }
   state.showPatientForm=false;
   lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
-  showToast(wasEditing ? 'Patient details updated.' : '👍 Patient registered!', wasEditing ? 'info' : 'success');
+  showToast(wasEditing ? 'Patient details updated. / രോഗിയുടെ വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു.' : '👍 Patient registered! / രോഗിയെ രജിസ്റ്റർ ചെയ്തു!', wasEditing ? 'info' : 'success');
 };
 
 /* ---------- patient visits ---------- */
@@ -1276,7 +1276,7 @@ async function loadVisitsPage(reset){
     state.hasMoreVisits = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load visits — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load visits — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / സന്ദർശനങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.visitsLoading = false; render();
 }
@@ -1304,7 +1304,7 @@ window.viewPatientVisits = async function(patientId){
     await loadMedicines();
   }catch(e){
     console.error(e);
-    showToast('Could not load visits for this patient.');
+    showToast('Could not load visits for this patient. / ഈ രോഗിയുടെ സന്ദർശനങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.data.visits = [];
   }
   state.visitsLoading = false; render();
@@ -1322,7 +1322,7 @@ window.registerOldVisit = async function(patientId){
       if(snap.exists()) patient = { id:snap.id, ...snap.data() };
     }catch(e){ console.error('Could not load patient', e); }
   }
-  if(!patient){ showToast('Could not load this patient.'); return; }
+  if(!patient){ showToast('Could not load this patient. / ഈ രോഗിയെ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   resetVisitForm();
   state.showVisitForm = true;
   state.visitForm.selectedPatient = patient;
@@ -1429,7 +1429,7 @@ window.searchVisitPatient = async function(term){
     const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
 };
 window.selectVisitPatient = async function(id){
@@ -1491,7 +1491,7 @@ window.deleteVisit = async function(id){
 };
 window.saveVisitForm = async function(){
   const f = state.visitForm;
-  if(!f.selectedPatient){ showToast('Please select a patient for this visit.'); return; }
+  if(!f.selectedPatient){ showToast('Please select a patient for this visit. / ഈ സന്ദർശനത്തിനായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
   const date = document.getElementById('vf-date').value;
   const reason = document.getElementById('vf-reason').value.trim();
   const doctorName = document.getElementById('vf-doctor').value;
@@ -1501,6 +1501,10 @@ window.saveVisitForm = async function(){
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
   if(!date){ showToast('Please choose a visit date. / ദയവായി സന്ദർശന തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
+  const vitalsWarnings = pediatricVitalsWarnings(f.selectedPatient.age, weight, height);
+  if(vitalsWarnings.length){
+    alert(['⚠️ Please inform the patient/parent before they leave: / ദയവായി രോഗി/രക്ഷിതാവ് പോകുന്നതിന് മുൻപ് ഇത് അറിയിക്കുക:', '', ...vitalsWarnings].join('\n\n'));
+  }
   const pharmacyRows = f.meds.filter(m=>(m.source||'pharmacy')==='pharmacy' && m.medicineId && Number(m.quantity)>0);
   const pharmacyMeds = pharmacyRows.map(m=>{
     const med = state.data.medicines.find(x=>x.id===m.medicineId);
@@ -1539,25 +1543,25 @@ window.saveVisitForm = async function(){
     await batch.commit();
   }catch(e){
     console.error(e);
-    showToast('Could not save visit — check the browser console for details.');
+    showToast('Could not save visit — check the browser console for details. / സന്ദർശനം സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetVisitForm();
   lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
-  showToast('👍 Visit saved!', 'success'); render();
+  showToast('👍 Visit saved! / സന്ദർശനം സേവ് ചെയ്തു!', 'success'); render();
   sendClinicEmail(`New patient visit — ${data.patientName}`, visitEmailText(data));
 };
 window.notifyDoctorVisit = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
   if(!v) return;
   const i = state.data.info;
-  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   window.open(waLinkWithText(i.notifyWhatsapp, visitEmailText(v)), '_blank');
 };
 window.sendPrescriptionWhatsApp = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
   if(!v) return;
-  if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  if(!v.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}${m.source==='outside'?' (please purchase from an outside pharmacy)':''}`).join('\n');
   const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
@@ -1601,7 +1605,7 @@ window.printPrescription = function(visitId){
   </div>
   </body></html>`;
   const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print the prescription.'); return; }
+  if(!w){ showToast('Please allow popups to print the prescription. / പ്രിസ്ക്രിപ്ഷൻ പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -1626,8 +1630,8 @@ async function loadPatientVisitHistory(patientId){
 }
 window.printPatientHistory = async function(patientId){
   const result = await loadPatientVisitHistory(patientId);
-  if(!result){ showToast('Could not load this patient.'); return; }
-  if(!result.visits){ showToast('Could not load visit history.'); return; }
+  if(!result){ showToast('Could not load this patient. / ഈ രോഗിയെ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
+  if(!result.visits){ showToast('Could not load visit history. / സന്ദർശന ചരിത്രം ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   const { patient, visits } = result;
   const i = state.data.info;
   const visitRows = visits.map(v=>{
@@ -1664,7 +1668,7 @@ window.printPatientHistory = async function(patientId){
   ${visitRows || '<p class="muted">No visits recorded yet.</p>'}
   </body></html>`;
   const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print this history.'); return; }
+  if(!w){ showToast('Please allow popups to print this history. / ചരിത്രം പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -1672,10 +1676,10 @@ window.printPatientHistory = async function(patientId){
 };
 window.notifyDoctorPatientHistory = async function(patientId){
   const i = state.data.info;
-  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const result = await loadPatientVisitHistory(patientId);
-  if(!result){ showToast('Could not load this patient.'); return; }
-  if(!result.visits){ showToast('Could not load visit history.'); return; }
+  if(!result){ showToast('Could not load this patient. / ഈ രോഗിയെ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
+  if(!result.visits){ showToast('Could not load visit history. / സന്ദർശന ചരിത്രം ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   const { patient, visits } = result;
   const MAX_VISITS = 8;
   const recent = visits.slice(-MAX_VISITS).reverse();
@@ -1720,7 +1724,7 @@ async function loadBillsPage(reset){
     state.hasMoreBills = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load bills — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load bills — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ബില്ലുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.billsLoading = false; render();
 }
@@ -1747,7 +1751,7 @@ window.viewPatientBills = async function(patientId){
     await loadMedicines();
   }catch(e){
     console.error(e);
-    showToast('Could not load bills for this patient.');
+    showToast('Could not load bills for this patient. / ഈ രോഗിയുടെ ബില്ലുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.data.bills = [];
   }
   state.billsLoading = false; render();
@@ -1797,7 +1801,7 @@ window.searchBillVisit = async function(term){
     const q = query(collection(db,'visits'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); showToast(`Visit search failed: ${e.message||e}`); }
+  }catch(e){ console.error(e); showToast(`Visit search failed: ${e.message||e} / സന്ദർശനം തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
 };
 window.selectBillVisit = async function(visitId){
@@ -1876,7 +1880,7 @@ async function computeNextBillNumber(){
 }
 window.saveBillForm = async function(){
   const f = state.billForm;
-  if(!f.selectedVisit){ showToast('Please select a patient visit to bill.'); return; }
+  if(!f.selectedVisit){ showToast('Please select a patient visit to bill. / ബിൽ ചെയ്യാൻ ഒരു സന്ദർശനം തിരഞ്ഞെടുക്കുക.'); return; }
   const consultationFee = document.getElementById('bf-consultation').value;
   f.consultationFee = consultationFee;
   const medItems = f.medItems.filter(m=>m.name && Number(m.quantity)>0).map(m=>({
@@ -1939,12 +1943,12 @@ window.saveBillForm = async function(){
     await batch.commit();
   }catch(e){
     console.error(e);
-    showToast('Could not save bill — check the browser console for details.');
+    showToast('Could not save bill — check the browser console for details. / ബിൽ സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetBillForm();
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
-  showToast(editing?'👍 Bill updated!':'👍 Bill saved!', 'success'); render();
+  showToast(editing?'👍 Bill updated! / ബിൽ അപ്ഡേറ്റ് ചെയ്തു!':'👍 Bill saved! / ബിൽ സേവ് ചെയ്തു!', 'success'); render();
   if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
   printBill({id:ref.id, ...data});
 };
@@ -1958,7 +1962,7 @@ window.deleteBill = async function(id){
   Object.entries(b.inventoryDelta||{}).forEach(([medId,delta])=>{ batch.update(doc(db,'medicines',medId), {quantity:increment(delta)}); });
   try{
     await batch.commit();
-  }catch(e){ console.error(e); showToast('Could not delete bill.'); return; }
+  }catch(e){ console.error(e); showToast('Could not delete bill. / ബിൽ ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
 };
 window.editBill = async function(id){
@@ -1992,7 +1996,7 @@ window.printBillById = async function(id){
       if(snap.exists()) b = {id:snap.id, ...snap.data()};
     }catch(e){ console.error(e); }
   }
-  if(b) printBill(b); else showToast('Could not find that bill.');
+  if(b) printBill(b); else showToast('Could not find that bill. / ഈ ബിൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.');
 };
 function waLinkWithText(phone, text){ return waLink(phone) + (text ? ('?text='+encodeURIComponent(text)) : ''); }
 window.sendBillWhatsApp = async function(id){
@@ -2003,8 +2007,8 @@ window.sendBillWhatsApp = async function(id){
       if(snap.exists()) b = {id:snap.id, ...snap.data()};
     }catch(e){ console.error(e); }
   }
-  if(!b){ showToast('Could not find that bill.'); return; }
-  if(!b.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  if(!b){ showToast('Could not find that bill. / ഈ ബിൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
+  if(!b.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const msg = `Hi ${b.patientName}, here is your bill from ${i.clinicName}.\nBill No: ${b.billNumber}\nDate: ${b.date}\nTotal: ${money(b.grandTotal)}\nPayment: ${b.paymentMethod==='upi'?'UPI':'Cash'}\nThank you for visiting us.`;
   window.open(waLinkWithText(b.patientPhone, msg), '_blank');
@@ -2017,9 +2021,9 @@ window.notifyDoctorBill = async function(id){
       if(snap.exists()) b = {id:snap.id, ...snap.data()};
     }catch(e){ console.error(e); }
   }
-  if(!b){ showToast('Could not find that bill.'); return; }
+  if(!b){ showToast('Could not find that bill. / ഈ ബിൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
   const i = state.data.info;
-  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info.'); return; }
+  if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   window.open(waLinkWithText(i.notifyWhatsapp, billEmailText(b)), '_blank');
 };
 window.billVisit = function(visitId){
@@ -2086,7 +2090,7 @@ function printBill(b){
   <p class="muted" style="margin-top:30px;">Thank you.</p>
   </body></html>`;
   const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print the bill.'); return; }
+  if(!w){ showToast('Please allow popups to print the bill. / ബിൽ പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -2115,7 +2119,7 @@ async function loadLabRecordsPage(reset){
     state.hasMoreLabRecords = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load lab tests — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load lab tests — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ലാബ് ടെസ്റ്റുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.labRecordsLoading = false; render();
 }
@@ -2134,14 +2138,14 @@ async function loadAttendancePage(reset){
     state.hasMoreAttendance = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load attendance — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load attendance — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ഹാജർ വിവരങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.attendanceLoading = false; render();
 }
 window.loadMoreAttendance = function(){ loadAttendancePage(false); };
 window.deleteAttendance = async function(id){
   if(!confirm('Delete this attendance record? This cannot be undone.\nഈ ഹാജർ രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
-  try{ await deleteDoc(doc(db,'attendance',id)); }catch(e){ console.error(e); showToast('Could not delete attendance record.'); return; }
+  try{ await deleteDoc(doc(db,'attendance',id)); }catch(e){ console.error(e); showToast('Could not delete attendance record. / ഹാജർ രേഖ ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleAttendanceDoc=null; await loadAttendancePage(true);
 };
 function formatAttendanceDuration(ms){
@@ -2166,7 +2170,7 @@ async function findOpenAttendance(staffName){
 window.staffCheckIn = async function(staffName){
   try{
     const open = await findOpenAttendance(staffName);
-    if(open){ showToast(`${staffName} is already checked in (since ${formatIST(open.loginAt)} IST).`); return; }
+    if(open){ showToast(`${staffName} is already checked in (since ${formatIST(open.loginAt)} IST). / ${staffName} നേരത്തെ തന്നെ ചെക്ക് ഇൻ ചെയ്തിട്ടുണ്ട്.`); return; }
   }catch(e){ console.error('Could not check existing attendance', e); }
   const now = new Date();
   try{
@@ -2177,19 +2181,19 @@ window.staffCheckIn = async function(staffName){
       logoutAt: null, logoutAtMillis: null,
       createdAtMillis: now.getTime()
     });
-    showToast(`${staffName} checked in at ${formatIST(now.toISOString())} IST.`, 'success');
-  }catch(e){ console.error('Could not record check-in', e); showToast('Could not record check-in.'); return; }
+    showToast(`${staffName} checked in at ${formatIST(now.toISOString())} IST. / ചെക്ക് ഇൻ ചെയ്തു.`, 'success');
+  }catch(e){ console.error('Could not record check-in', e); showToast('Could not record check-in. / ചെക്ക് ഇൻ രേഖപ്പെടുത്താൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleAttendanceDoc = null; await loadAttendancePage(true);
 };
 window.staffCheckOut = async function(staffName){
   let open = null;
   try{ open = await findOpenAttendance(staffName); }catch(e){ console.error('Could not find open attendance record', e); }
-  if(!open){ showToast(`No open check-in found for ${staffName}.`); return; }
+  if(!open){ showToast(`No open check-in found for ${staffName}. / ${staffName} ചെക്ക് ഇൻ ചെയ്തതായി കാണുന്നില്ല.`); return; }
   const now = new Date();
   try{
     await updateDoc(doc(db,'attendance',open.id), { logoutAt: now.toISOString(), logoutAtMillis: now.getTime() });
-    showToast(`${staffName} checked out at ${formatIST(now.toISOString())} IST.`, 'success');
-  }catch(e){ console.error('Could not record check-out', e); showToast('Could not record check-out.'); return; }
+    showToast(`${staffName} checked out at ${formatIST(now.toISOString())} IST. / ചെക്ക് ഔട്ട് ചെയ്തു.`, 'success');
+  }catch(e){ console.error('Could not record check-out', e); showToast('Could not record check-out. / ചെക്ക് ഔട്ട് രേഖപ്പെടുത്താൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleAttendanceDoc = null; await loadAttendancePage(true);
 };
 function resetLabRecordForm(){
@@ -2213,7 +2217,7 @@ window.searchLabRecordPatient = async function(term){
     const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.labRecordForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
 };
 window.selectLabRecordPatient = function(id){
@@ -2238,17 +2242,17 @@ window.deleteLabRecord = async function(id){
   if(!confirm('Delete this lab test record? This cannot be undone.\nഈ ലാബ് ടെസ്റ്റ് രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{
     await deleteDoc(doc(db,'labRecords',id));
-  }catch(e){ console.error(e); showToast('Could not delete lab test record.'); return; }
+  }catch(e){ console.error(e); showToast('Could not delete lab test record. / ലാബ് ടെസ്റ്റ് രേഖ ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
 };
 window.saveLabRecordForm = async function(){
   const f = state.labRecordForm;
-  if(!f.selectedPatient){ showToast('Please select a patient for this lab test.'); return; }
+  if(!f.selectedPatient){ showToast('Please select a patient for this lab test. / ഈ ലാബ് ടെസ്റ്റിനായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
   const date = document.getElementById('lf-date').value;
   const details = document.getElementById('lf-details').value.trim();
   const amount = document.getElementById('lf-amount').value;
-  if(!date){ showToast('Please choose a date.'); return; }
-  if(!details){ showToast('Please describe the lab test(s).'); return; }
+  if(!date){ showToast('Please choose a date. / ഒരു തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
+  if(!details){ showToast('Please describe the lab test(s). / ലാബ് ടെസ്റ്റിന്റെ വിവരണം നൽകുക.'); return; }
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
@@ -2263,12 +2267,12 @@ window.saveLabRecordForm = async function(){
     }
   }catch(e){
     console.error(e);
-    showToast('Could not save lab test — check the browser console for details.');
+    showToast('Could not save lab test — check the browser console for details. / ലാബ് ടെസ്റ്റ് സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetLabRecordForm();
   lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
-  showToast('👍 Lab test saved!', 'success'); render();
+  showToast('👍 Lab test saved! / ലാബ് ടെസ്റ്റ് സേവ് ചെയ്തു!', 'success'); render();
 };
 
 /* ---------- vaccinations ---------- */
@@ -2293,7 +2297,7 @@ async function loadVaccinationsPage(reset){
     state.hasMoreVaccinations = snap.docs.length === 50;
   }catch(e){
     console.error(e);
-    showToast('Could not load vaccinations — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load vaccinations — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / വാക്സിനേഷനുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
   }
   state.vaccinationsLoading = false; render();
 }
@@ -2319,7 +2323,7 @@ window.searchVaccinationPatient = async function(term){
     const q = query(collection(db,'patients'), orderBy(fieldName), startAt(value), endAt(value+''), limit(8));
     const snap = await getDocs(q);
     state.vaccinationForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
-  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e}`); }
+  }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
 };
 window.selectVaccinationPatient = function(id){
@@ -2339,12 +2343,12 @@ window.recordDueVaccination = function(patientId, vaccineKey){
 };
 window.deleteVaccination = async function(id){
   if(!confirm('Delete this vaccination record? This cannot be undone.\nഈ വാക്സിനേഷൻ രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
-  try{ await deleteDoc(doc(db,'vaccinations',id)); }catch(e){ console.error(e); showToast('Could not delete vaccination record.'); return; }
+  try{ await deleteDoc(doc(db,'vaccinations',id)); }catch(e){ console.error(e); showToast('Could not delete vaccination record. / വാക്സിനേഷൻ രേഖ ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
   lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
 };
 window.saveVaccinationForm = async function(){
   const f = state.vaccinationForm;
-  if(!f.selectedPatient){ showToast('Please select a patient.'); return; }
+  if(!f.selectedPatient){ showToast('Please select a patient. / ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
   const date = document.getElementById('vac-date').value;
   const notes = document.getElementById('vac-notes').value.trim();
   if(!date){ showToast('Please choose a date. / ദയവായി തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
@@ -2366,12 +2370,12 @@ window.saveVaccinationForm = async function(){
     await addDoc(collection(db,'vaccinations'), data);
   }catch(e){
     console.error(e);
-    showToast('Could not save vaccination — check the browser console for details.');
+    showToast('Could not save vaccination — check the browser console for details. / വാക്സിനേഷൻ സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
   }
   resetVaccinationForm();
   lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
-  showToast('👍 Vaccination recorded!', 'success'); render();
+  showToast('👍 Vaccination recorded! / വാക്സിനേഷൻ രേഖപ്പെടുത്തി!', 'success'); render();
 };
 async function loadVaccinationsDue(){
   try{
@@ -2418,7 +2422,7 @@ async function loadCollectionsReport(){
     state.reportBills = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){
     console.error('Failed to load collections report', e);
-    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / റിപ്പോർട്ട് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.reportBills = [];
   }
   state.reportLoading = false; render();
@@ -2433,7 +2437,7 @@ async function loadPatientsReport(){
     state.reportPatients = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){
     console.error('Failed to load patients report', e);
-    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / റിപ്പോർട്ട് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.reportPatients = [];
   }
   state.patientsReportLoading = false; render();
@@ -2446,7 +2450,7 @@ async function loadVisitsReportData(){
     state.reportVisitsList = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){
     console.error('Failed to load visits report', e);
-    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / റിപ്പോർട്ട് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.reportVisitsList = [];
   }
   state.visitsReportLoading = false; render();
@@ -2459,7 +2463,7 @@ async function loadLabRecordsReportData(){
     state.reportLabRecords = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){
     console.error('Failed to load lab tests report', e);
-    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / റിപ്പോർട്ട് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.reportLabRecords = [];
   }
   state.labReportLoading = false; render();
@@ -2472,7 +2476,7 @@ async function loadPurchasesReportData(){
     state.reportPurchases = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){
     console.error('Failed to load purchases report', e);
-    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it.');
+    showToast('Could not load the report — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / റിപ്പോർട്ട് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     state.reportPurchases = [];
   }
   state.purchasesReportLoading = false; render();
@@ -2719,10 +2723,10 @@ async function runExport(label, collectionName, orderField, columns, filenamePre
     const rows = await fetchAllDocs(collectionName, orderField, (n)=>{ state.backupExporting = `${label} (${n} so far)…`; render(); });
     const csv = toCSV(rows, columns);
     downloadCSV(`${filenamePrefix}-${todayISO()}.csv`, csv);
-    showToast(`Downloaded ${rows.length} ${label.toLowerCase()}.`);
+    showToast(`Downloaded ${rows.length} ${label.toLowerCase()}. / ഡൗൺലോഡ് ചെയ്തു.`);
   }catch(e){
     console.error(e);
-    showToast(`Could not export ${label.toLowerCase()} — check the browser console for details.`);
+    showToast(`Could not export ${label.toLowerCase()} — check the browser console for details. / എക്സ്പോർട്ട് ചെയ്യാൻ കഴിഞ്ഞില്ല.`);
   }
   state.backupExporting = ''; render();
 }
@@ -3294,6 +3298,28 @@ function adultIdealWeightRangeKg(heightCm){
   // Same 18.5-23 "normal" BMI band used by the Health Check tool.
   return { low: Math.round(18.5*h*h*10)/10, high: Math.round(23*h*h*10)/10 };
 }
+// Only checked for children (the growth-chart ranges only cover ages 1-17) --
+// staff should mention this to the patient/parent, not silently note it.
+function pediatricVitalsWarnings(age, weight, height){
+  const warnings = [];
+  const ageNum = Number(age);
+  if(isNaN(ageNum) || ageNum<=0 || ageNum>=18) return warnings;
+  const w = Number(weight);
+  if(w>0){
+    const wr = pediatricWeightRangeKg(ageNum);
+    if(wr && (w<wr.low || w>wr.high)){
+      warnings.push(`Weight (${w} kg) is outside the typical range for age ${ageNum} (~${wr.low}–${wr.high} kg). Please inform the patient/parent.\nഭാരം (${w} കി.ഗ്രാം) പ്രായത്തിന് (${ageNum}) അനുയോജ്യമായ പരിധിക്ക് (~${wr.low}–${wr.high} കി.ഗ്രാം) പുറത്താണ്. ദയവായി രോഗിയെ/രക്ഷിതാവിനെ അറിയിക്കുക.`);
+    }
+  }
+  const h = Number(height);
+  if(h>0){
+    const hr = pediatricHeightRangeCm(ageNum);
+    if(hr && (h<hr.low || h>hr.high)){
+      warnings.push(`Height (${h} cm) is outside the typical range for age ${ageNum} (~${hr.low}–${hr.high} cm). Please inform the patient/parent.\nഉയരം (${h} സെ.മീ) പ്രായത്തിന് (${ageNum}) അനുയോജ്യമായ പരിധിക്ക് (~${hr.low}–${hr.high} സെ.മീ) പുറത്താണ്. ദയവായി രോഗിയെ/രക്ഷിതാവിനെ അറിയിക്കുക.`);
+    }
+  }
+  return warnings;
+}
 function healthCheckRecommendations(f){
   const age = Number(f.age)||0;
   const heightM = Number(f.height)/100;
@@ -3467,7 +3493,7 @@ window.sendLowStockAlert = function(){
   const items = state.data.medicines.filter(m=>medStatus(m).label==='Low stock');
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const msg = `Low stock alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}: ${m.quantity} ${m.unit||''} left`).join('\n');
   window.open(waLinkWithText(target, msg), '_blank');
 };
@@ -3495,7 +3521,7 @@ window.sendExpiryAlert = function(){
   const items = state.data.medicines.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label));
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const msg = `Medicine expiry alert — ${i.clinicName}:\n` + items.map(m=>`- ${m.name}${m.batch?` (batch ${m.batch})`:''}: ${expiryStatusText(m)}`).join('\n');
   window.open(waLinkWithText(target, msg), '_blank');
 };
@@ -3566,7 +3592,7 @@ async function buildSummaryText(label, fromDate, toDate){
 window.sendDailySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const today = todayISO();
   const text = await buildSummaryText('Daily summary', today, today);
   window.open(waLinkWithText(target, text), '_blank');
@@ -3574,7 +3600,7 @@ window.sendDailySummary = async function(){
 window.sendWeeklySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const to = todayISO();
   const fromDateObj = new Date(); fromDateObj.setDate(fromDateObj.getDate()-6);
   const from = fromDateObj.toISOString().slice(0,10);
@@ -3584,7 +3610,7 @@ window.sendWeeklySummary = async function(){
 window.sendMonthlySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info.'); return; }
+  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   const from = monthStartISO();
   const to = todayISO();
   const text = await buildSummaryText('Monthly summary', from, to);
@@ -3612,7 +3638,7 @@ function followUpsDueHtml(list){
 }
 window.sendFollowUpReminder = function(patientId){
   const v = (state.followUpsDue||[]).find(x=>x.patientId===patientId);
-  if(!v || !v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  if(!v || !v.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const msg = `Hi ${v.patientName||'there'}, this is ${i.clinicName}. It's been a while since your last diabetes check-up — please book a follow-up visit when convenient. You can reply here or call us at ${i.phone}.`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
