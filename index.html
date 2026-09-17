@@ -3581,10 +3581,11 @@ window.sendFollowUpReminder = function(patientId){
 window.sendVaccinationReminder = function(patientId, vaccineKey){
   const v = (state.vaccinationsDue||[]).find(x=>x.patientId===patientId && x.vaccineKey===vaccineKey);
   if(!v){ return; }
-  if(!v.patientPhone){ showToast('No phone number on file for this patient.'); return; }
+  if(!v.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const overdueNote = v.daysOverdue>0 ? ` This is ${v.daysOverdue} day${v.daysOverdue>1?'s':''} overdue.` : '';
-  const msg = `Hi, this is ${i.clinicName}. Your child ${v.patientName||''} (OPD ${v.patientOpdNo||''}) is due for the next vaccination: ${v.vaccineLabel}.${overdueNote} Please visit us at your convenience, or call ${i.phone} to schedule.`;
+  const overdueNoteMl = v.daysOverdue>0 ? ` ഇത് ${v.daysOverdue} ദിവസം വൈകിയിരിക്കുന്നു.` : '';
+  const msg = `Hi, this is ${i.clinicName}. Your child ${v.patientName||''} (OPD ${v.patientOpdNo||''}) is due for the next vaccination: ${v.vaccineLabel}.${overdueNote} Please visit us at your convenience, or call ${i.phone} to schedule.\n\nനമസ്കാരം, ഇത് ${i.clinicName} ആണ്. നിങ്ങളുടെ കുട്ടി ${v.patientName||''} ന് (OPD ${v.patientOpdNo||''}) അടുത്ത വാക്സിനേഷൻ ഡ്യൂ ആണ്: ${v.vaccineLabel}.${overdueNoteMl} ദയവായി സൗകര്യാനുസരണം ക്ലിനിക്ക് സന്ദർശിക്കുക, അല്ലെങ്കിൽ അപ്പോയിന്റ്മെന്റിനായി ${i.phone} എന്ന നമ്പറിൽ വിളിക്കുക.`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
 function viewAdminDashboard(){
