@@ -4667,36 +4667,36 @@ function viewAdminCleanliness(){
 }
 function viewAdminHelp(){
   const guides = [
-    { icon:'🧑‍🤝‍🧑', title:'Register a new patient / പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
-      'Go to "Patients (OPD)" and click "+ New OPD registration". / "Patients (OPD)" എന്നതിൽ പോയി "+ New OPD registration" ക്ലിക്ക് ചെയ്യുക.',
-      'OPD No. is filled in automatically — check the patient\'s name and phone number carefully. / OPD നമ്പർ താനേ വരും — പേരും ഫോൺ നമ്പറും ശ്രദ്ധയോടെ പരിശോധിക്കുക.',
-      'Click "Register patient" to save. / സേവ് ചെയ്യാൻ "Register patient" ക്ലിക്ക് ചെയ്യുക.'
+    { icon:'🧑‍🤝‍🧑', title:'പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
+      '"Patients (OPD)" എന്നതിൽ ക്ലിക്ക് ചെയ്ത് "+ New OPD registration" ക്ലിക്ക് ചെയ്യുക.',
+      'OPD നമ്പർ താനേ വരും — രോഗിയുടെ പേരും ഫോൺ നമ്പറും ശ്രദ്ധയോടെ നൽകുക.',
+      'സേവ് ചെയ്യാൻ "Register patient" ക്ലിക്ക് ചെയ്യുക.'
     ]},
-    { icon:'🩺', title:'Register a visit / സന്ദർശനം രേഖപ്പെടുത്തുക', steps:[
-      'Go to "Patient Visits" and click "+ Register visit". / "Patient Visits" എന്നതിൽ പോയി "+ Register visit" ക്ലിക്ക് ചെയ്യുക.',
-      'Search the patient by name or OPD number and select them. / പേര് അല്ലെങ്കിൽ OPD നമ്പർ ഉപയോഗിച്ച് രോഗിയെ തിരഞ്ഞെടുക്കുക.',
-      'Fill in the reason, vitals (if taken) and any medicines prescribed. / കാരണം, വൈറ്റൽസ്, നിർദ്ദേശിച്ച മരുന്നുകൾ എന്നിവ ചേർക്കുക.',
-      'Click "Register visit" to save. If weight/height looks unusual for the child\'s age, a popup will remind you to tell the parent. / "Register visit" ക്ലിക്ക് ചെയ്യുക. കുട്ടിയുടെ പ്രായത്തിന് ഭാരം/ഉയരം പൊരുത്തമില്ലെങ്കിൽ, രക്ഷിതാവിനെ അറിയിക്കാൻ ഒരു അറിയിപ്പ് വരും.'
+    { icon:'🩺', title:'സന്ദർശനം രേഖപ്പെടുത്തുക', steps:[
+      '"Patient Visits" ൽ പോയി "+ Register visit" ക്ലിക്ക് ചെയ്യുക.',
+      'പേര് അല്ലെങ്കിൽ OPD നമ്പർ ഉപയോഗിച്ച് രോഗിയെ തിരഞ്ഞെടുക്കുക.',
+      'കാരണം, വൈറ്റൽസ് (എടുത്തിട്ടുണ്ടെങ്കിൽ), നിർദ്ദേശിച്ച മരുന്നുകൾ എന്നിവ ചേർക്കുക.',
+      'സേവ് ചെയ്യാൻ "Register visit" ക്ലിക്ക് ചെയ്യുക. കുട്ടിയുടെ പ്രായത്തിന് ഭാരമോ ഉയരമോ പൊരുത്തമില്ലെങ്കിൽ, രക്ഷിതാവിനെ അറിയിക്കാൻ ഓർമ്മപ്പെടുത്തുന്ന ഒരു അറിയിപ്പ് വരും.'
     ]},
-    { icon:'🧾', title:'Create a bill / ബിൽ ഉണ്ടാക്കുക', steps:[
-      'Go to "Billing" and click "+ New bill". / "Billing" എന്നതിൽ പോയി "+ New bill" ക്ലിക്ക് ചെയ്യുക.',
-      'Search for the patient\'s visit (it must already be registered under Patient Visits). / "Patient Visits" ൽ രേഖപ്പെടുത്തിയ സന്ദർശനം തിരഞ്ഞെടുക്കുക.',
-      'Check the medicines and amounts, add any extra service charges, and choose Cash or UPI. / മരുന്നുകളും തുകയും പരിശോധിച്ച്, വേണമെങ്കിൽ കൂടുതൽ ചാർജ്ജ് ചേർത്ത്, Cash അല്ലെങ്കിൽ UPI തിരഞ്ഞെടുക്കുക.',
-      'Click "Save & Print". Made a mistake? Every bill has an "Edit" button to correct it later. / "Save & Print" ക്ലിക്ക് ചെയ്യുക. തെറ്റ് വന്നാൽ, ഓരോ ബില്ലിലും ഉള്ള "Edit" ബട്ടൺ ഉപയോഗിച്ച് പിന്നീട് തിരുത്താം.'
+    { icon:'🧾', title:'ബിൽ ഉണ്ടാക്കുക', steps:[
+      '"Billing" ൽ പോയി "+ New bill" ക്ലിക്ക് ചെയ്യുക.',
+      'രോഗിയുടെ സന്ദർശനം തിരയുക (അത് നേരത്തെ "Patient Visits" ൽ രേഖപ്പെടുത്തിയിരിക്കണം).',
+      'മരുന്നുകളും തുകയും പരിശോധിച്ച്, വേണമെങ്കിൽ കൂടുതൽ ചാർജ്ജ് ചേർത്ത്, Cash അല്ലെങ്കിൽ UPI തിരഞ്ഞെടുക്കുക.',
+      '"Save & Print" ക്ലിക്ക് ചെയ്യുക. തെറ്റ് വന്നാൽ പേടിക്കേണ്ട — ഓരോ ബില്ലിലും ഉള്ള "Edit" ബട്ടൺ ഉപയോഗിച്ച് പിന്നീട് തിരുത്താം.'
     ]},
-    { icon:'💉', title:'Record a vaccination / വാക്സിനേഷൻ രേഖപ്പെടുത്തുക', steps:[
-      'Go to "Vaccinations" and click "+ Record a vaccination". / "Vaccinations" എന്നതിൽ പോയി "+ Record a vaccination" ക്ലിക്ക് ചെയ്യുക.',
-      'Select the patient and the vaccine given. For Vitamin A/D, deworming, or anything not in the list, choose "Other" and type it in. / രോഗിയെയും വാക്സിനെയും തിരഞ്ഞെടുക്കുക. Vitamin A/D പോലുള്ളവയ്ക്ക് "Other" തിരഞ്ഞെടുത്ത് ടൈപ്പ് ചെയ്യുക.',
-      'Set the date it was actually given and click "Save". / കൊടുത്ത തീയതി നൽകി "Save" ക്ലിക്ക് ചെയ്യുക.'
+    { icon:'💉', title:'വാക്സിനേഷൻ രേഖപ്പെടുത്തുക', steps:[
+      '"Vaccinations" ൽ പോയി "+ Record a vaccination" ക്ലിക്ക് ചെയ്യുക.',
+      'രോഗിയെയും കൊടുത്ത വാക്സിനെയും തിരഞ്ഞെടുക്കുക. Vitamin A/D, വിരയിളക്കൽ പോലുള്ളവയ്ക്ക് "Other" തിരഞ്ഞെടുത്ത് ടൈപ്പ് ചെയ്യുക.',
+      'യഥാർത്ഥത്തിൽ കൊടുത്ത തീയതി നൽകി "Save" ക്ലിക്ക് ചെയ്യുക.'
     ]},
-    { icon:'🖨️', title:'Print or send a patient\'s full history / രോഗിയുടെ മുഴുവൻ ചരിത്രം പ്രിന്റ് ചെയ്യുക / അയയ്ക്കുക', steps:[
-      'From "Patient Visits", click "History" next to any visit row, or "Visits" from the Patients page then "Print full history". / "Patient Visits" ൽ ഏതെങ്കിലും വരിയിലെ "History" ക്ലിക്ക് ചെയ്യുക, അല്ലെങ്കിൽ Patients പേജിൽ നിന്ന് "Visits" → "Print full history".',
-      'This opens a printable page with every visit for that patient. / ഇത് ആ രോഗിയുടെ എല്ലാ സന്ദർശനങ്ങളും ഉള്ള ഒരു പ്രിന്റ് ചെയ്യാവുന്ന പേജ് തുറക്കും.',
-      '"Notify doctor" sends the same history to the doctor over WhatsApp instead of printing. / "Notify doctor" ഇത് പ്രിന്റ് ചെയ്യാതെ ഡോക്ടർക്ക് വാട്സ്ആപ്പിൽ അയയ്ക്കും.'
+    { icon:'🖨️', title:'രോഗിയുടെ മുഴുവൻ ചരിത്രം പ്രിന്റ് ചെയ്യുക / അയയ്ക്കുക', steps:[
+      '"Patient Visits" ൽ ഏതെങ്കിലും വരിയിലെ "History" ക്ലിക്ക് ചെയ്യുക, അല്ലെങ്കിൽ Patients പേജിൽ നിന്ന് "Visits" ക്ലിക്ക് ചെയ്ത് "Print full history" തിരഞ്ഞെടുക്കുക.',
+      'ഇത് ആ രോഗിയുടെ എല്ലാ സന്ദർശനങ്ങളും ഉള്ള ഒരു പ്രിന്റ് ചെയ്യാവുന്ന പേജ് തുറക്കും.',
+      '"Notify doctor" ക്ലിക്ക് ചെയ്താൽ ഇത് പ്രിന്റ് ചെയ്യാതെ തന്നെ ഡോക്ടർക്ക് വാട്സ്ആപ്പിൽ അയയ്ക്കും.'
     ]},
-    { icon:'🕒', title:'Add an old visit for a patient / പഴയ ഒരു സന്ദർശനം ചേർക്കുക', steps:[
-      'From "Patient Visits", search and open a patient\'s visit list, then click "🕒 Register old visit". / "Patient Visits" ൽ രോഗിയുടെ സന്ദർശന ലിസ്റ്റ് തുറന്ന് "🕒 Register old visit" ക്ലിക്ക് ചെയ്യുക.',
-      'The patient is already selected — just change the date to the old date and fill in the details. / രോഗി നേരത്തെ തന്നെ തിരഞ്ഞെടുത്തിരിക്കും — തീയതി മാറ്റി ബാക്കി വിവരങ്ങൾ ചേർക്കുക.'
+    { icon:'🕒', title:'പഴയ ഒരു സന്ദർശനം ചേർക്കുക', steps:[
+      '"Patient Visits" ൽ രോഗിയുടെ സന്ദർശന ലിസ്റ്റ് തുറന്ന് "🕒 Register old visit" ക്ലിക്ക് ചെയ്യുക.',
+      'രോഗി നേരത്തെ തന്നെ തിരഞ്ഞെടുത്തിരിക്കും — തീയതി പഴയ തീയതിയിലേക്ക് മാറ്റി ബാക്കി വിവരങ്ങൾ ചേർക്കുക.'
     ]}
   ];
   const cards = guides.map(g=>`<div class="card" style="margin-bottom:16px;">
@@ -4706,8 +4706,8 @@ function viewAdminHelp(){
     </ol>
   </div>`).join('');
   return adminShell(`
-    <h2 class="display">Help / സഹായം</h2>
-    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Quick step-by-step guides for the most common daily tasks. / ദിവസവും ചെയ്യുന്ന പ്രധാന കാര്യങ്ങൾക്കുള്ള ലളിതമായ വഴികാട്ടി.</p>
+    <h2 class="display">സഹായം</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">ദിവസവും ചെയ്യുന്ന പ്രധാന കാര്യങ്ങൾക്കുള്ള ലളിതമായ വഴികാട്ടി.</p>
     ${cards}
   `);
 }
