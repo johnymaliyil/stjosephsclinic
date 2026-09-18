@@ -664,7 +664,7 @@ let state = {
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
-  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null,
+  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
@@ -1642,8 +1642,10 @@ window.saveVisitForm = async function(){
       const delta = (afterMap[id]||0) - (beforeMap[id]||0);
       if(delta) batch.update(doc(db,'medicines',id), {quantity:increment(-delta)});
     });
+    data.updatedBy = state.sessionStaffName || '';
     batch.update(doc(db,'visits',state.editingVisit.id), data);
   }else{
+    data.enteredBy = state.sessionStaffName || '';
     data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
     const ref = doc(collection(db,'visits'));
     batch.set(ref, data);
@@ -2029,7 +2031,8 @@ window.saveBillForm = async function(){
     createdAtMillis: editing ? editing.createdAtMillis : Date.now(),
     createdAt: editing ? editing.createdAt : new Date().toISOString()
   };
-  if(editing) data.updatedAt = new Date().toISOString();
+  if(editing){ data.updatedAt = new Date().toISOString(); data.updatedBy = state.sessionStaffName || ''; }
+  else{ data.enteredBy = state.sessionStaffName || ''; }
   const registrationFeeKept = !editing && f.registrationFeePatientId && f.extraItems.some(x=>x.isRegistrationFee && x.description && Number(x.amount)>0);
 
   const ref = editing ? doc(db,'bills',editing.id) : doc(collection(db,'bills'));
@@ -2474,7 +2477,7 @@ window.saveVaccinationForm = async function(){
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
     vaccineKey:f.vaccineKey, vaccineLabel,
-    date, notes, createdAtMillis:Date.now(), createdAt:new Date().toISOString()
+    date, notes, enteredBy: state.sessionStaffName || '', createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
   try{
     await addDoc(collection(db,'vaccinations'), data);
@@ -2940,6 +2943,8 @@ window.tryAdminLogin = async function(){
 window.adminLogout = async function(){
   await recordStaffLogout();
   await signOut(auth);
+  state.sessionStaffName = null;
+  try{ sessionStorage.removeItem('sessionStaffName'); }catch(e){}
   try{ localStorage.removeItem('lastAdminView'); }catch(e){}
   viewHistory = [];
   skipNextHistoryPush = true;
@@ -2971,7 +2976,14 @@ async function recordStaffLogout(){
 }
 onAuthStateChanged(auth, (user)=>{
   state.isAdmin = !!user;
-  if(user){ startStaffReminders(); } else { stopStaffReminders(); }
+  if(user){
+    if(!state.sessionStaffName){
+      try{ state.sessionStaffName = sessionStorage.getItem('sessionStaffName') || null; }catch(e){}
+    }
+    startStaffReminders();
+  } else {
+    stopStaffReminders();
+  }
   if(user){
     const remindAction = new URLSearchParams(location.search).get('remind');
     if(remindAction){
@@ -3533,6 +3545,22 @@ function viewAdminLogin(){
   ${loginCard}
   </section></div>${publicFooter()}`;
 }
+function viewStaffSelectGate(){
+  return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;">
+    <div class="card" style="max-width:360px;width:100%;text-align:center;">
+      <h2 class="display" style="margin-top:0;">Who is this? / ആരാണ് ഉപയോഗിക്കുന്നത്?</h2>
+      <p style="color:var(--text-muted);font-size:13px;">Select your name to continue. / തുടരാൻ നിങ്ങളുടെ പേര് തിരഞ്ഞെടുക്കുക.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+        ${STAFF_NAMES.map(n=>`<button class="btn btn-primary" onclick="selectSessionStaff('${n}')">${escapeHtml(n)}</button>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+window.selectSessionStaff = function(name){
+  state.sessionStaffName = name;
+  try{ sessionStorage.setItem('sessionStaffName', name); }catch(e){}
+  render();
+};
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
@@ -3955,6 +3983,7 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.source==='outside'?' <span style="color:var(--accent);">(to order)</span>':''}`).join(', ') || '—'}</td>
     <td class="mono" style="font-size:12px;">${escapeHtml(vitalsSummary(v)) || '—'}</td>
+    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}${v.updatedBy?`<br>edited: ${escapeHtml(v.updatedBy)}`:''}</td>
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
@@ -3980,7 +4009,7 @@ function viewAdminVisits(){
     </div>`}
     <div class="table-wrap">
       ${state.visitsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
     ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
@@ -4091,6 +4120,7 @@ function viewAdminVaccinations(){
     <td>${escapeHtml(v.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.vaccineLabel||v.vaccineKey||'')}</td>
     <td>${escapeHtml(v.notes||'')}</td>
+    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}</td>
     <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteVaccination('${v.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
@@ -4103,7 +4133,7 @@ function viewAdminVaccinations(){
     </div>
     <div class="table-wrap">
       ${state.vaccinationsLoading? loadingSkeleton(5) :
-        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">💉</div>No vaccinations recorded yet.</div>`}
     </div>
     ${(!state.vaccinationsLoading && state.hasMoreVaccinations) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVaccinations()">Load 50 more</button></div>` : ''}
@@ -4185,6 +4215,7 @@ function viewAdminBilling(){
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
+    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
@@ -4198,7 +4229,7 @@ function viewAdminBilling(){
     </div>`}
     <div class="table-wrap">
       ${state.billsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🧾</div>No bills yet.</div>`}
     </div>
     ${(!state.billsLoading && state.hasMoreBills) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreBills()">Load 50 more</button></div>` : ''}
@@ -4911,6 +4942,7 @@ function render(){
   const needsAuth = state.view.startsWith('admin-') && state.view!=='admin-login';
   let html;
   if(needsAuth && !state.isAdmin){ html = viewAdminLogin(); }
+  else if(needsAuth && !state.sessionStaffName){ html = viewStaffSelectGate(); }
   else{
     switch(state.view){
       case 'home': html=viewHome(); break;
