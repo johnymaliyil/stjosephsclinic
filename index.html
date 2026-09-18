@@ -3571,8 +3571,8 @@ function viewAdminLogin(){
 function viewStaffSelectGate(){
   return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;">
     <div class="card" style="max-width:360px;width:100%;text-align:center;">
-      <h2 class="display" style="margin-top:0;">Who is this? / ആരാണ് ഉപയോഗിക്കുന്നത്?</h2>
-      <p style="color:var(--text-muted);font-size:13px;">Select your name to continue. / തുടരാൻ നിങ്ങളുടെ പേര് തിരഞ്ഞെടുക്കുക.</p>
+      <h2 class="display" style="margin-top:0;">ആരാണ് ഉപയോഗിക്കുന്നത്?</h2>
+      <p style="color:var(--text-muted);font-size:13px;">തുടരാൻ നിങ്ങളുടെ പേര് തിരഞ്ഞെടുക്കുക.</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
         ${STAFF_NAMES.map(n=>`<button class="btn btn-primary" onclick="selectSessionStaff('${n}')">${escapeHtml(n)}</button>`).join('')}
       </div>
