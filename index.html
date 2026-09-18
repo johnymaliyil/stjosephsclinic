@@ -625,7 +625,7 @@ const DEFAULT_INFO = {
   founderPhotoUrl: "",
   upiId: "",
   whatsapp: "9048869262",
-  notifyEmail: "drjosephvarkey@gmail.com",
+  notifyEmail: "clinicstjos@gmail.com",
   notifyWhatsapp: "+919388823003",
   emailjsPublicKey: "",
   emailjsServiceId: "",
@@ -1322,6 +1322,7 @@ window.savePatientForm = async function(){
   const opdNo=document.getElementById('pf-opd').value.trim();
   const name=document.getElementById('pf-name').value.trim();
   const phone=document.getElementById('pf-phone').value.trim();
+  const email=document.getElementById('pf-email').value.trim();
   const gender=document.getElementById('pf-gender').value;
   const age=document.getElementById('pf-age').value;
   const dob=document.getElementById('pf-dob').value;
@@ -1342,7 +1343,7 @@ window.savePatientForm = async function(){
   }
   state.patientFormErrors = null;
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
-    phone, gender, age, dob, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
+    phone, email, gender, age, dob, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
   const wasEditing = !!state.editingPatient;
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
   else{ await addDoc(collection(db,'patients'), {...data, registrationFeeCharged:false}); }
@@ -3850,6 +3851,7 @@ function viewAdminPatients(){
         ${pfe&&pfe.name?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി പേര് നൽകുക</p>`:''}
       </div>
       <div class="field"><label>Phone</label><input id="pf-phone" type="text" value="${escapeHtml(p?p.phone:'')}"></div>
+      <div class="field"><label>Email (optional)</label><input id="pf-email" type="email" value="${escapeHtml(p?p.email:'')}"></div>
       <div class="field"><label>Gender</label><select id="pf-gender">${['Male','Female','Other'].map(g=>`<option ${p&&p.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field"><label>Age</label><input id="pf-age" type="number" min="0" value="${p?p.age:''}"></div>
       <div class="field"><label>Date of birth (optional)</label><input id="pf-dob" type="date" value="${p&&p.dob?p.dob:''}">
@@ -3863,7 +3865,7 @@ function viewAdminPatients(){
     </div></div>`;
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
-    <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
+    <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.email)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deletePatient('${pt.id}')">Delete</button></td>
   </tr>`).join('');
   const searchRow=`<div class="search-row" style="margin-bottom:16px;">
@@ -3880,7 +3882,7 @@ function viewAdminPatients(){
     ${formCard}${searchRow}
     <div class="table-wrap">
       ${state.patientsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Address</th><th>Phone</th><th>Gender</th><th>Age</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Address</th><th>Phone</th><th>Email</th><th>Gender</th><th>Age</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗂️</div>No patients match your search yet.</div>`}
     </div>
     ${(!state.patientsLoading && state.hasMorePatients) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMorePatients()">Load 50 more</button></div>` : ''}
