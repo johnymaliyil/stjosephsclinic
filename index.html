@@ -2126,6 +2126,23 @@ window.sendBillWhatsApp = async function(id){
   const msg = `Hi ${b.patientName}, here is your bill from ${i.clinicName}.\nBill No: ${b.billNumber}\nDate: ${b.date}\nTotal: ${money(b.grandTotal)}\nPayment: ${b.paymentMethod==='upi'?'UPI':'Cash'}\nThank you for visiting us.`;
   window.open(waLinkWithText(b.patientPhone, msg), '_blank');
 };
+window.emailBill = async function(id){
+  let b = state.data.bills.find(x=>x.id===id);
+  if(!b){
+    try{
+      const snap = await getDoc(doc(db,'bills',id));
+      if(snap.exists()) b = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!b){ showToast('Could not find that bill. / ഈ ബിൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
+  const i = state.data.info;
+  const subject = `Bill #${b.billNumber} — ${i.clinicName}`;
+  const body = billEmailText(b);
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(gmailUrl, '_blank');
+  printBill(b);
+  alert('Gmail has opened in a new tab with the subject and bill details filled in — just add the recipient\'s email and send.\n\nBrowsers cannot attach a file to the email automatically, so a printable copy of the bill has also opened — choose "Save as PDF" there and attach that file to the Gmail message before sending.\n\nജിമെയിൽ ഒരു പുതിയ ടാബിൽ തുറന്നിട്ടുണ്ട്, subject-ഉം ബില്ലിന്റെ വിവരങ്ങളും നിറച്ചിട്ടുണ്ട് — സ്വീകർത്താവിന്റെ ഇമെയിൽ ചേർത്ത് അയക്കുക.\n\nബ്രൗസറിന് ഫയൽ തനിയെ അറ്റാച്ച് ചെയ്യാൻ കഴിയാത്തതിനാൽ, ബില്ലിന്റെ പ്രിന്റ് പതിപ്പും തുറന്നിട്ടുണ്ട് — അവിടെ നിന്ന് "Save as PDF" ചെയ്ത്, ആ ഫയൽ ജിമെയിൽ സന്ദേശത്തിൽ അറ്റാച്ച് ചെയ്ത ശേഷം അയക്കുക.');
+};
 window.notifyDoctorBill = async function(id){
   let b = state.data.bills.find(x=>x.id===id);
   if(!b){
@@ -4216,7 +4233,7 @@ function viewAdminBilling(){
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
