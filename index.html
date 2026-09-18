@@ -664,7 +664,7 @@ let state = {
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
-  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null,
+  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
@@ -2963,6 +2963,8 @@ window.adminLogout = async function(){
   await signOut(auth);
   state.sessionStaffName = null;
   try{ sessionStorage.removeItem('sessionStaffName'); }catch(e){}
+  state.dailyReminderSeen = false;
+  try{ sessionStorage.removeItem('dailyReminderSeen'); }catch(e){}
   try{ localStorage.removeItem('lastAdminView'); }catch(e){}
   viewHistory = [];
   skipNextHistoryPush = true;
@@ -2997,6 +2999,9 @@ onAuthStateChanged(auth, (user)=>{
   if(user){
     if(!state.sessionStaffName){
       try{ state.sessionStaffName = sessionStorage.getItem('sessionStaffName') || null; }catch(e){}
+    }
+    if(!state.dailyReminderSeen){
+      try{ state.dailyReminderSeen = sessionStorage.getItem('dailyReminderSeen')==='1'; }catch(e){}
     }
     startStaffReminders();
   } else {
@@ -3577,6 +3582,27 @@ function viewStaffSelectGate(){
 window.selectSessionStaff = function(name){
   state.sessionStaffName = name;
   try{ sessionStorage.setItem('sessionStaffName', name); }catch(e){}
+  render();
+};
+function viewDailyReminderGate(){
+  return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;">
+    <div class="card" style="max-width:480px;width:100%;">
+      <h2 class="display" style="margin-top:0;text-align:center;">🧹 ദിവസേനയുള്ള ഓർമ്മപ്പെടുത്തൽ</h2>
+      <div style="margin-top:16px;line-height:1.7;">
+        <p><strong>1. ക്ലിനിക്കും പരിസരവും പരിശോധിക്കുക</strong><br>
+        ക്ലിനിക്കും പരിസരവും വൃത്തിയായി ഇരിക്കുന്നുണ്ടോ എന്ന് പരിശോധിക്കുക. വൃത്തിഹീനമായി എന്തെങ്കിലും കണ്ടാൽ, ഫോട്ടോ എടുത്ത് "Cleanliness Reports" എന്നതിൽ റിപ്പോർട്ട് ചെയ്യുക.</p>
+        <p><strong>2. പഴയ വാക്സിനേഷൻ ചാർട്ടുകൾ എൻ്റർ ചെയ്യുക</strong><br>
+        പഴയ വാക്സിനേഷൻ ചാർട്ടുകളിൽ നിന്നുള്ള രേഖകൾ സിസ്റ്റത്തിൽ ചേർക്കുക. സിസ്റ്റത്തിൽ ചേർത്തുകഴിഞ്ഞ ചാർട്ടുകൾ ബാക്കിയുള്ളവയിൽ നിന്ന് വേറിട്ട് മാറ്റിവയ്ക്കുക, അതുവഴി ഒരേ ചാർട്ട് ആവർത്തിച്ച് ചേർക്കാതിരിക്കാം. കഴിയുന്നതും ദിവസവും 50 ചാർട്ടുകൾ എങ്കിലും ചേർക്കാൻ ശ്രമിക്കുക.</p>
+      </div>
+      <div style="text-align:center;margin-top:12px;">
+        <button class="btn btn-primary" onclick="acknowledgeDailyReminder()">മനസ്സിലായി, തുടരാം</button>
+      </div>
+    </div>
+  </div>`;
+}
+window.acknowledgeDailyReminder = function(){
+  state.dailyReminderSeen = true;
+  try{ sessionStorage.setItem('dailyReminderSeen', '1'); }catch(e){}
   render();
 };
 
@@ -4962,6 +4988,7 @@ function render(){
   let html;
   if(needsAuth && !state.isAdmin){ html = viewAdminLogin(); }
   else if(needsAuth && !state.sessionStaffName){ html = viewStaffSelectGate(); }
+  else if(needsAuth && !state.dailyReminderSeen){ html = viewDailyReminderGate(); }
   else{
     switch(state.view){
       case 'home': html=viewHome(); break;
