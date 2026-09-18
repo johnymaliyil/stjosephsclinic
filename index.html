@@ -664,7 +664,7 @@ let state = {
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
-  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, currentStaffName:STAFF_NAMES[0],
+  medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
@@ -1604,7 +1604,6 @@ window.saveVisitForm = async function(){
   const bp = document.getElementById('vf-bp').value.trim();
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
-  const staffName = document.getElementById('vf-staff').value || state.currentStaffName;
   if(!date){
     state.visitFormErrors = { date:true };
     showToast('Please choose a visit date. / ദയവായി സന്ദർശന തീയതി തിരഞ്ഞെടുക്കുക.');
@@ -1643,10 +1642,8 @@ window.saveVisitForm = async function(){
       const delta = (afterMap[id]||0) - (beforeMap[id]||0);
       if(delta) batch.update(doc(db,'medicines',id), {quantity:increment(-delta)});
     });
-    data.updatedBy = staffName;
     batch.update(doc(db,'visits',state.editingVisit.id), data);
   }else{
-    data.enteredBy = staffName;
     data.createdAtMillis = Date.now(); data.createdAt = new Date().toISOString();
     const ref = doc(collection(db,'visits'));
     batch.set(ref, data);
@@ -1996,7 +1993,6 @@ window.saveBillForm = async function(){
   if(!f.selectedVisit){ showToast('Please select a patient visit to bill. / ബിൽ ചെയ്യാൻ ഒരു സന്ദർശനം തിരഞ്ഞെടുക്കുക.'); return; }
   const consultationFee = document.getElementById('bf-consultation').value;
   f.consultationFee = consultationFee;
-  const staffName = document.getElementById('bf-staff').value || state.currentStaffName;
   const medItems = f.medItems.filter(m=>m.name && Number(m.quantity)>0).map(m=>({
     medicineId:m.medicineId||'', name:m.name, quantity:Number(m.quantity), unitPrice:Number(m.unitPrice)||0
   }));
@@ -2033,8 +2029,7 @@ window.saveBillForm = async function(){
     createdAtMillis: editing ? editing.createdAtMillis : Date.now(),
     createdAt: editing ? editing.createdAt : new Date().toISOString()
   };
-  if(editing){ data.updatedAt = new Date().toISOString(); data.updatedBy = staffName; }
-  else{ data.enteredBy = staffName; }
+  if(editing) data.updatedAt = new Date().toISOString();
   const registrationFeeKept = !editing && f.registrationFeePatientId && f.extraItems.some(x=>x.isRegistrationFee && x.description && Number(x.amount)>0);
 
   const ref = editing ? doc(db,'bills',editing.id) : doc(collection(db,'bills'));
@@ -2466,7 +2461,6 @@ window.saveVaccinationForm = async function(){
   if(!f.selectedPatient){ showToast('Please select a patient. / ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
   const date = document.getElementById('vac-date').value;
   const notes = document.getElementById('vac-notes').value.trim();
-  const staffName = document.getElementById('vac-staff').value || state.currentStaffName;
   if(!date){ showToast('Please choose a date. / ദയവായി തീയതി തിരഞ്ഞെടുക്കുക.'); return; }
   let vaccineLabel;
   if(f.vaccineKey==='custom'){
@@ -2480,7 +2474,7 @@ window.saveVaccinationForm = async function(){
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
     vaccineKey:f.vaccineKey, vaccineLabel,
-    date, notes, enteredBy:staffName, createdAtMillis:Date.now(), createdAt:new Date().toISOString()
+    date, notes, createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
   try{
     await addDoc(collection(db,'vaccinations'), data);
@@ -3921,7 +3915,6 @@ function viewAdminVisits(){
         ${state.visitFormErrors&&state.visitFormErrors.date?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി തീയതി തിരഞ്ഞെടുക്കുക</p>`:''}
       </div>
       <div class="field"><label>Doctor</label><select id="vf-doctor"><option value="">— Not specified —</option>${doctorOptions}</select></div>
-      <div class="field"><label>Staff / ജീവനക്കാരൻ</label><select id="vf-staff" onchange="state.currentStaffName=this.value;">${STAFF_NAMES.map(n=>`<option value="${n}" ${state.currentStaffName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label>Reason for visit</label><textarea id="vf-reason" rows="2">${escapeHtml(f.reason)}</textarea></div>
     <label>Vitals (optional)</label>
@@ -3962,7 +3955,6 @@ function viewAdminVisits(){
     <td>${escapeHtml(v.reason||'')}</td>
     <td>${(v.medicines||[]).map(m=>`${escapeHtml(m.name)}${m.quantity?` × ${escapeHtml(String(m.quantity))}`:''}${m.source==='outside'?' <span style="color:var(--accent);">(to order)</span>':''}`).join(', ') || '—'}</td>
     <td class="mono" style="font-size:12px;">${escapeHtml(vitalsSummary(v)) || '—'}</td>
-    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}${v.updatedBy?`<br>edited: ${escapeHtml(v.updatedBy)}`:''}</td>
     <td class="row-actions">
       ${(v.medicines&&v.medicines.length)?`<button class="btn btn-outline btn-small" onclick="printPrescription('${v.id}')">Rx</button><button class="btn btn-outline btn-small" onclick="sendPrescriptionWhatsApp('${v.id}')">WhatsApp</button>`:''}
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
@@ -3988,7 +3980,7 @@ function viewAdminVisits(){
     </div>`}
     <div class="table-wrap">
       ${state.visitsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Medicines prescribed</th><th>Vitals</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🗒️</div>No visits recorded yet.</div>`}
     </div>
     ${(!state.visitsLoading && state.hasMoreVisits) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVisits()">Load 50 more</button></div>` : ''}
@@ -4077,7 +4069,6 @@ function viewAdminVaccinations(){
       </div>
       ${f.vaccineKey==='custom' ? `<div class="field" style="grid-column:1/-1;"><label>Specify</label><input type="text" placeholder="e.g. Vitamin A (1st dose)" value="${escapeHtml(f.customVaccineName)}" onchange="state.vaccinationForm.customVaccineName=this.value;"></div>` : ''}
       <div class="field"><label>Date given</label><input id="vac-date" type="date" value="${escapeHtml(f.date)}"></div>
-      <div class="field"><label>Staff / ജീവനക്കാരൻ</label><select id="vac-staff" onchange="state.currentStaffName=this.value;">${STAFF_NAMES.map(n=>`<option value="${n}" ${state.currentStaffName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label>Notes (optional)</label><textarea id="vac-notes" rows="2">${escapeHtml(f.notes)}</textarea></div>
     <div class="row-actions" style="margin-top:14px;">
@@ -4100,7 +4091,6 @@ function viewAdminVaccinations(){
     <td>${escapeHtml(v.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.vaccineLabel||v.vaccineKey||'')}</td>
     <td>${escapeHtml(v.notes||'')}</td>
-    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}</td>
     <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteVaccination('${v.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
@@ -4113,7 +4103,7 @@ function viewAdminVaccinations(){
     </div>
     <div class="table-wrap">
       ${state.vaccinationsLoading? loadingSkeleton(5) :
-        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">💉</div>No vaccinations recorded yet.</div>`}
     </div>
     ${(!state.vaccinationsLoading && state.hasMoreVaccinations) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreVaccinations()">Load 50 more</button></div>` : ''}
@@ -4181,7 +4171,6 @@ function viewAdminBilling(){
       </div>
       ${f.paymentMethod==='upi' && !state.data.info.upiId ? `<p style="color:var(--danger);font-size:12px;margin:6px 0 0;">No UPI ID set yet — add one in Clinic Info to show a payment QR code on the bill.</p>` : ''}
     </div>
-    <div class="field" style="max-width:280px;"><label>Staff / ജീവനക്കാരൻ</label><select id="bf-staff" onchange="state.currentStaffName=this.value;">${STAFF_NAMES.map(n=>`<option value="${n}" ${state.currentStaffName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select></div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:right;">
       <div style="color:var(--text-muted);font-size:13px;">Medicines ₹${totals.medTotal.toFixed(2)} + Services ₹${totals.extraTotal.toFixed(2)} + Consultation ₹${totals.consultationFee.toFixed(2)}</div>
       <div class="display" style="font-size:22px;color:var(--primary-dark);">Total: ₹${totals.grandTotal.toFixed(2)}</div>
@@ -4196,7 +4185,6 @@ function viewAdminBilling(){
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
-    <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
   </tr>`).join('');
   return adminShell(`
@@ -4210,7 +4198,7 @@ function viewAdminBilling(){
     </div>`}
     <div class="table-wrap">
       ${state.billsLoading? loadingSkeleton(6) :
-        rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        rows? `<table><thead><tr><th>Date</th><th>Bill No.</th><th>Patient</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">🧾</div>No bills yet.</div>`}
     </div>
     ${(!state.billsLoading && state.hasMoreBills) ? `<div class="toolbar" style="margin-top:12px;"><button class="btn btn-outline btn-small" onclick="loadMoreBills()">Load 50 more</button></div>` : ''}
