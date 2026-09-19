@@ -1880,6 +1880,14 @@ function resetBillForm(){
   state.editingBill = null;
   state.billForm = { visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash', registrationFeePatientId:null, consultationFeeNote:null };
 }
+window.selectBillPaymentMethod = function(method){
+  if(method==='cash'){
+    const confirmedCash = confirm('രോഗിയോട് ചോദിച്ചോ? ക്യാഷ് ആണോ അതോ ഗൂഗിൾ പേ (UPI) ആണോ അടയ്ക്കുന്നത്?\n\nക്യാഷ് ആണെങ്കിൽ "OK" അമർത്തുക. ഗൂഗിൾ പേ / UPI ആണെങ്കിൽ "Cancel" അമർത്തുക.');
+    if(!confirmedCash){ state.billForm.paymentMethod='upi'; render(); return; }
+  }
+  state.billForm.paymentMethod = method;
+  render();
+};
 async function loadLastPaidConsultation(patientId){
   try{
     // Equality-only filter, sorted client-side -- same composite-index-avoidance
@@ -4244,8 +4252,8 @@ function viewAdminBilling(){
     <div class="field" style="max-width:280px;">
       <label>Payment method</label>
       <div style="display:flex;gap:16px;padding-top:4px;">
-        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod!=='upi'?'checked':''} onchange="state.billForm.paymentMethod='cash'; render();"> Cash</label>
-        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod==='upi'?'checked':''} onchange="state.billForm.paymentMethod='upi'; render();"> UPI</label>
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod!=='upi'?'checked':''} onchange="selectBillPaymentMethod('cash')"> Cash</label>
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="radio" name="bf-pay" style="width:auto;" ${f.paymentMethod==='upi'?'checked':''} onchange="selectBillPaymentMethod('upi')"> UPI</label>
       </div>
       ${f.paymentMethod==='upi' && !state.data.info.upiId ? `<p style="color:var(--danger);font-size:12px;margin:6px 0 0;">No UPI ID set yet — add one in Clinic Info to show a payment QR code on the bill.</p>` : ''}
     </div>
