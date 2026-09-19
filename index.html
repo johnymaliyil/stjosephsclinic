@@ -4999,7 +4999,7 @@ function render(){
   let html;
   if(needsAuth && !state.isAdmin){ html = viewAdminLogin(); }
   else if(needsAuth && !state.sessionStaffName){ html = viewStaffSelectGate(); }
-  else if(needsAuth && !state.dailyReminderSeen){ html = viewDailyReminderGate(); }
+  else if(needsAuth && !state.dailyReminderSeen && state.sessionStaffName!=='Admin'){ html = viewDailyReminderGate(); }
   else{
     switch(state.view){
       case 'home': html=viewHome(); break;
