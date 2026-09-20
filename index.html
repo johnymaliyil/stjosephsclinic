@@ -679,8 +679,8 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), details:'', amount:'' },
   editingLabRecord:null,
-  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[],
-  vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' },
+  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0,
+  vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
   patientsReportLoading:false, reportPatients:[],
@@ -2458,7 +2458,7 @@ window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; 
 window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
 function resetVaccinationForm(){
   state.showVaccinationForm = false;
-  state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' };
+  state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false };
 }
 window.setVaccinationPatientSearchField = function(field){
   state.vaccinationForm.patientSearchField = field;
@@ -2516,7 +2516,7 @@ window.saveVaccinationForm = async function(){
   const data = {
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
-    vaccineKey:f.vaccineKey, vaccineLabel,
+    vaccineKey:f.vaccineKey, vaccineLabel, fromOldChart: !!f.fromOldChart,
     date, notes, enteredBy: state.sessionStaffName || '', createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
   try{
@@ -2527,9 +2527,18 @@ window.saveVaccinationForm = async function(){
     return;
   }
   resetVaccinationForm();
-  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
   showToast('👍 Vaccination recorded! / വാക്സിനേഷൻ രേഖപ്പെടുത്തി!', 'success'); render();
 };
+async function loadOldChartProgress(){
+  try{
+    // Equality-only filter, sorted/filtered client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const snap = await getDocs(query(collection(db,'vaccinations'), where('fromOldChart','==',true)));
+    const today = todayISO();
+    state.oldChartEntriesToday = snap.docs.filter(d=>(d.data().createdAt||'').slice(0,10)===today).length;
+  }catch(e){ console.error('Could not load old-chart backlog progress', e); state.oldChartEntriesToday = 0; }
+}
 async function loadVaccinationsDue(){
   try{
     const [patientsSnap, vaccSnap] = await Promise.all([
@@ -3202,7 +3211,7 @@ window.setView = async function(v){
   }
   if(v==='admin-vaccinations'){
     resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
-    await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+    await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
   }
   if(v==='admin-billing'){
     state.billsSearchTerm=''; lastVisibleBillDoc=null;
@@ -4178,6 +4187,9 @@ function viewAdminVaccinations(){
       <div class="field"><label>Date given</label><input id="vac-date" type="date" value="${escapeHtml(f.date)}"></div>
     </div>
     <div class="field"><label>Notes (optional)</label><textarea id="vac-notes" rows="2">${escapeHtml(f.notes)}</textarea></div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="checkbox" style="width:auto;" ${f.fromOldChart?'checked':''} onchange="state.vaccinationForm.fromOldChart=this.checked;"> ഇത് പഴയ പേപ്പർ ചാർട്ടിൽ നിന്ന് എൻ്റർ ചെയ്യുന്നതാണ് (This is from an old paper chart)</label>
+    </div>
     <div class="row-actions" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveVaccinationForm()">Save</button>
       <button class="btn btn-outline" onclick="resetVaccinationForm(); render();">Cancel</button>
@@ -4204,6 +4216,16 @@ function viewAdminVaccinations(){
   return adminShell(`
     <h2 class="display">Vaccinations</h2>
     <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Reference schedule based on India's Universal Immunization Programme — confirm timing with the doctor. Due reminders need the patient's date of birth to be set (Patients (OPD) → Edit).</p>
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="margin-top:0;">🗂️ പഴയ ചാർട്ട് എൻട്രി പുരോഗതി (Old chart entry progress — today)</h3>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div class="num" style="font-family:'Fraunces',serif;font-size:32px;color:var(--primary);">${state.oldChartEntriesToday}<span style="font-size:16px;color:var(--text-muted);"> / 50</span></div>
+        <div style="flex:1;min-width:160px;height:10px;border-radius:5px;background:var(--surface-soft);overflow:hidden;">
+          <div style="height:100%;border-radius:5px;background:var(--primary);width:${Math.min(100, Math.round(state.oldChartEntriesToday/50*100))}%;"></div>
+        </div>
+      </div>
+      <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">"Record a vaccination" വഴി ചേർക്കുമ്പോൾ "This is from an old paper chart" എന്ന ബോക്സ് ടിക്ക് ചെയ്താൽ ഇവിടെ എണ്ണം കൂടും.</p>
+    </div>
     ${dueCard}
     ${formCard}
     <div class="search-row" style="margin-bottom:16px;">
