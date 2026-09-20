@@ -1382,7 +1382,7 @@ async function loadVisitsPage(reset){
 }
 window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); };
 window.loadMoreVisits = function(){ loadVisitsPage(false); };
-window.viewPatientVisits = async function(patientId){
+window.viewPatientVisits = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
   pushViewHistory();
   state.view='admin-visits'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
@@ -1390,7 +1390,7 @@ window.viewPatientVisits = async function(patientId){
   resetBillForm();
   resetVisitForm();
   state.visitsSearchTerm = '';
-  state.visitsPatientFilter = { id:patientId, name: patient?patient.name:'' };
+  state.visitsPatientFilter = { id:patientId, name: patientName || (patient?patient.name:'') };
   try{ localStorage.setItem('lastAdminView','admin-visits'); }catch(e){}
   lastVisibleVisitDoc = null;
   state.visitsLoading = true; render(); window.scrollTo(0,0);
@@ -1845,14 +1845,14 @@ async function loadBillsPage(reset){
 }
 window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); };
 window.loadMoreBills = function(){ loadBillsPage(false); };
-window.viewPatientBills = async function(patientId){
+window.viewPatientBills = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
   pushViewHistory();
   state.view='admin-billing'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
   resetBillForm();
   state.billsSearchTerm = '';
-  state.billsPatientFilter = { id:patientId, name: patient?patient.name:'' };
+  state.billsPatientFilter = { id:patientId, name: patientName || (patient?patient.name:'') };
   try{ localStorage.setItem('lastAdminView','admin-billing'); }catch(e){}
   lastVisibleBillDoc = null;
   state.billsLoading = true; render(); window.scrollTo(0,0);
@@ -4345,17 +4345,20 @@ function reportTabPatients(){
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
     const patients = filteredReportPatients();
-    const rows = patients.map(p=>`<tr>
+    const rows = patients.map(p=>{
+      const safeName = (p.name||'').replace(/'/g,"\\'");
+      return `<tr>
       <td class="mono">${escapeHtml(p.opdNo||'')}</td>
       <td>${escapeHtml(p.name||'')}</td>
       <td class="mono">${escapeHtml(p.phone||'')}</td>
       <td>${escapeHtml(p.gender||'')}</td>
       <td class="mono">${escapeHtml(p.age||'')}</td>
       <td class="mono">${escapeHtml((p.registeredAt||'').slice(0,10))}</td>
-    </tr>`).join('');
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${p.id}','${safeName}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${p.id}','${safeName}')">Bills</button></td>
+    </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🗂️</div>No patients match this filter.</div>`}
     </div>`;
   })() : '';
