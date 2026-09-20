@@ -1673,18 +1673,30 @@ window.notifyDoctorVisit = function(visitId){
   if(!i.notifyWhatsapp){ showToast('No "Notify WhatsApp number" set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
   window.open(waLinkWithText(i.notifyWhatsapp, visitEmailText(v)), '_blank');
 };
-window.sendPrescriptionWhatsApp = function(visitId){
-  const v = state.data.visits.find(x=>x.id===visitId);
-  if(!v) return;
+window.sendPrescriptionWhatsApp = async function(visitId){
+  let v = state.data.visits.find(x=>x.id===visitId);
+  if(!v){
+    try{
+      const snap = await getDoc(doc(db,'visits',visitId));
+      if(snap.exists()) v = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!v){ showToast('Could not find that visit. / ഈ സന്ദർശനം കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
   if(!v.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
   const i = state.data.info;
   const meds = (v.medicines||[]).map((m,idx)=>`${idx+1}. ${m.name}${m.dosage?` — ${m.dosage}`:''}${m.source==='outside'?' (please purchase from an outside pharmacy)':''}`).join('\n');
   const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
-window.printPrescription = function(visitId){
-  const v = state.data.visits.find(x=>x.id===visitId);
-  if(!v) return;
+window.printPrescription = async function(visitId){
+  let v = state.data.visits.find(x=>x.id===visitId);
+  if(!v){
+    try{
+      const snap = await getDoc(doc(db,'visits',visitId));
+      if(snap.exists()) v = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!v){ showToast('Could not find that visit. / ഈ സന്ദർശനം കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
   const i = state.data.info;
   const rxRows = (v.medicines||[]).map((m,idx)=>`
     <div style="margin-bottom:14px;">
