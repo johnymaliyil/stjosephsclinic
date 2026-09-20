@@ -776,6 +776,17 @@ function billEmailText(b){
   lines.push('', `Consultation fee: ₹${Number(b.consultationFee||0).toFixed(2)}`, `Total: ₹${Number(b.grandTotal||0).toFixed(2)}`, `Payment method: ${b.paymentMethod==='upi'?'UPI':'Cash'}`);
   return lines.join('\n');
 }
+function billThankYouMessage(b){
+  const i = state.data.info;
+  return [
+    `ഹായ് ${b.patientName}, ${i.clinicName}-ൽ വന്നതിന് നന്ദി! 🙏`,
+    '',
+    'എന്തെങ്കിലും സംശയങ്ങളോ ആവശ്യങ്ങളോ ഉണ്ടെങ്കിൽ ഡോക്ടറോട് സംസാരിക്കാൻ ഞങ്ങളെ ബന്ധപ്പെടാം.',
+    '',
+    'അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യാനും അഭിപ്രായം (feedback) പങ്കിടാനും സന്ദർശിക്കുക:',
+    'www.clinicstjosephs.com'
+  ].join('\n');
+}
 function vitalsSummary(v){
   return [
     v.weight?`Wt ${v.weight} kg`:'', v.height?`Ht ${v.height} cm`:'', v.bp?`BP ${v.bp}`:'',
@@ -2170,6 +2181,7 @@ window.saveBillForm = async function(){
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
   showToast(editing?'👍 Bill updated! / ബിൽ അപ്ഡേറ്റ് ചെയ്തു!':'👍 Bill saved! / ബിൽ സേവ് ചെയ്തു!', 'success'); render();
   if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
+  if(!editing && data.patientPhone){ window.open(waLinkWithText(data.patientPhone, billThankYouMessage(data)), '_blank'); }
   printBill({id:ref.id, ...data});
 };
 window.deleteBill = async function(id){
