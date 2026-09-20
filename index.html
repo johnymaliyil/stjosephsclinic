@@ -668,6 +668,7 @@ let state = {
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
+  growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
@@ -1888,6 +1889,89 @@ window.clearBillsPatientFilter = function(){
   lastVisibleBillDoc = null;
   loadBillsPage(true);
 };
+window.viewPatientGrowthChart = async function(patientId, patientName){
+  pushViewHistory();
+  state.view = 'admin-growth-chart';
+  state.growthChartPatient = { id:patientId, name:patientName || '' };
+  state.growthChartData = [];
+  state.growthChartLoading = true; render(); window.scrollTo(0,0);
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'visits'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    state.growthChartData = snap.docs.map(d=>d.data())
+      .filter(v=>v.weight || v.height)
+      .sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0))
+      .map(v=>({date:v.date||'', weight:Number(v.weight)||null, height:Number(v.height)||null}));
+  }catch(e){
+    console.error(e);
+    showToast('Could not load growth data for this patient. / ഈ രോഗിയുടെ വളർച്ചാ വിവരങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
+  }
+  state.growthChartLoading = false; render();
+};
+function svgLineChart(points, opts){
+  opts = opts || {};
+  const w = opts.width || 640, h = opts.height || 220, color = opts.color || '#1F4A42';
+  const pad = { l:40, r:16, t:16, b:30 };
+  const values = points.map(p=>p.value);
+  const minV = Math.min(...values), maxV = Math.max(...values);
+  const rangeV = (maxV - minV) || 1;
+  const yLo = minV - rangeV*0.15, yHi = maxV + rangeV*0.15;
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+  const xStep = points.length > 1 ? plotW/(points.length-1) : 0;
+  const xy = points.map((p,i)=>({
+    x: pad.l + i*xStep,
+    y: pad.t + plotH - ((p.value - yLo)/(yHi - yLo))*plotH,
+    ...p
+  }));
+  const gridLines = [0,0.5,1].map(f=>{
+    const y = pad.t + plotH - f*plotH;
+    const val = (yLo + f*(yHi-yLo)).toFixed(1);
+    return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${w-pad.r}" y2="${y.toFixed(1)}" stroke="#E1D9C5" stroke-width="1"/><text x="${pad.l-6}" y="${(y+4).toFixed(1)}" font-size="10" fill="#736F64" text-anchor="end">${val}</text>`;
+  }).join('');
+  const labelEvery = Math.max(1, Math.ceil(points.length/6));
+  const xLabels = xy.filter((p,i)=>i%labelEvery===0 || i===xy.length-1)
+    .map(p=>`<text x="${p.x.toFixed(1)}" y="${h-pad.b+16}" font-size="10" fill="#736F64" text-anchor="middle">${escapeHtml(p.label)}</text>`).join('');
+  const polyPoints = xy.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const dots = xy.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${color}"><title>${escapeHtml(p.label)}: ${p.value}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block;">
+    ${gridLines}
+    <polyline points="${polyPoints}" fill="none" stroke="${color}" stroke-width="2"/>
+    ${dots}
+    ${xLabels}
+  </svg>`;
+}
+function viewAdminGrowthChart(){
+  const p = state.growthChartPatient || {};
+  const data = state.growthChartData || [];
+  const weightPoints = data.filter(d=>d.weight).map(d=>({label:d.date, value:d.weight}));
+  const heightPoints = data.filter(d=>d.height).map(d=>({label:d.date, value:d.height}));
+  const rows = data.map(d=>`<tr>
+    <td class="mono">${escapeHtml(d.date||'')}</td>
+    <td class="mono">${d.weight?escapeHtml(String(d.weight))+' kg':'—'}</td>
+    <td class="mono">${d.height?escapeHtml(String(d.height))+' cm':'—'}</td>
+  </tr>`).join('');
+  const body = state.growthChartLoading ? loadingSkeleton(4) : (
+    data.length===0 ? `<div class="empty-state"><div class="icon">📈</div>No weight/height recorded for this patient yet. / തൂക്കമോ ഉയരമോ ഇതുവരെ രേഖപ്പെടുത്തിയിട്ടില്ല.</div>` :
+    `<div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Weight (kg)</h3>
+      ${weightPoints.length ? svgLineChart(weightPoints,{color:'#1F4A42'}) : `<p class="muted">No weight readings recorded.</p>`}
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Height (cm)</h3>
+      ${heightPoints.length ? svgLineChart(heightPoints,{color:'#C08A3E'}) : `<p class="muted">No height readings recorded.</p>`}
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Date</th><th>Weight</th><th>Height</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`
+  );
+  return adminShell(`
+    <h2 class="display">Growth Chart — ${escapeHtml(p.name||'')}</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Based on weight/height recorded on this patient's visits. Not a substitute for WHO growth-standard comparison — discuss with the doctor.</p>
+    ${body}
+  `);
+}
 
 function resetBillForm(){
   state.showBillForm = false;
@@ -3934,7 +4018,7 @@ function viewAdminPatients(){
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
     <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.email)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button>${deleteBtn('deletePatient', pt.id)}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="viewPatientGrowthChart('${pt.id}','${(pt.name||'').replace(/'/g,"\\'")}')">Growth Chart</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button>${deleteBtn('deletePatient', pt.id)}</td>
   </tr>`).join('');
   const searchRow=`<div class="search-row" style="margin-bottom:16px;">
     <select onchange="setPatientSearchField(this.value)">
@@ -5061,6 +5145,7 @@ function render(){
       case 'admin-labtests': html=viewAdminLabTests(); break;
       case 'admin-vaccinations': html=viewAdminVaccinations(); break;
       case 'admin-billing': html=viewAdminBilling(); break;
+      case 'admin-growth-chart': html=viewAdminGrowthChart(); break;
       case 'admin-reports': html=viewAdminReports(); break;
       case 'admin-inventory': html=viewAdminInventory(); break;
       case 'admin-purchases': html=viewAdminPurchases(); break;
