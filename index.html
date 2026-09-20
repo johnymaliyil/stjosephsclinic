@@ -510,6 +510,8 @@ window.setLang = function(lang){
 };
 
 const STAFF_NAMES = ['Sheena', 'Danny', 'Admin'];
+function isAdminStaff(){ return state.sessionStaffName === 'Admin'; }
+function deleteBtn(fn, id, label){ return isAdminStaff() ? `<button class="btn btn-danger btn-small" onclick="${fn}('${id}')">${label||'Delete'}</button>` : ''; }
 const HELP_GUIDES = [
   { icon:'🧑‍🤝‍🧑', title:'പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
     '"Patients (OPD)" എന്നതിൽ ക്ലിക്ക് ചെയ്ത് "+ New OPD registration" ക്ലിക്ക് ചെയ്യുക.',
@@ -3903,7 +3905,7 @@ function viewAdminPatients(){
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
     <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.email)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deletePatient('${pt.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button>${deleteBtn('deletePatient', pt.id)}</td>
   </tr>`).join('');
   const searchRow=`<div class="search-row" style="margin-bottom:16px;">
     <select onchange="setPatientSearchField(this.value)">
@@ -4046,7 +4048,7 @@ function viewAdminVisits(){
       <button class="btn btn-outline btn-small" onclick="billVisitLabTest('${v.id}')">Lab Test</button>
       <button class="btn btn-outline btn-small" onclick="notifyDoctorVisit('${v.id}')">Notify Dr</button>
       <button class="btn btn-outline btn-small" onclick="printPatientHistory('${v.patientId}')">History</button>
-      <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteVisit('${v.id}')">Delete</button>
+      <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button>${deleteBtn('deleteVisit', v.id)}
     </td>
   </tr>`).join('');
   return adminShell(`
@@ -4107,7 +4109,7 @@ function viewAdminLabTests(){
     <td>${escapeHtml(r.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(r.details||'')}</td>
     <td class="mono">₹${Number(r.amount||0).toFixed(2)}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editLabRecord('${r.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteLabRecord('${r.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editLabRecord('${r.id}')">Edit</button>${deleteBtn('deleteLabRecord', r.id)}</td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Lab Tests</h2>
@@ -4177,7 +4179,7 @@ function viewAdminVaccinations(){
     <td>${escapeHtml(v.vaccineLabel||v.vaccineKey||'')}</td>
     <td>${escapeHtml(v.notes||'')}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}</td>
-    <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteVaccination('${v.id}')">Delete</button></td>
+    <td class="row-actions">${deleteBtn('deleteVaccination', v.id)}</td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Vaccinations</h2>
@@ -4272,7 +4274,7 @@ function viewAdminBilling(){
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteBill('${b.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button>${deleteBtn('deleteBill', b.id)}</td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
@@ -4588,7 +4590,7 @@ function viewAdminInventory(){
     <td class="mono">${escapeHtml(x.quantity)} ${escapeHtml(x.unit)}</td><td class="mono">${escapeHtml(x.reorderLevel)}</td>
     <td class="mono">${x.price?'₹'+escapeHtml(x.price):'—'}</td>
     <td><span class="badge ${s.cls}">${s.label}</span>${r?`<div style="color:var(--accent);font-size:11px;margin-top:3px;">⏳ ~${r.daysLeft}d left</div>`:''}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editMed('${x.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="deleteMed('${x.id}')">Delete</button></td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="editMed('${x.id}')">Edit</button>${deleteBtn('deleteMed', x.id)}</td>
   </tr>`;}).join('');
   return adminShell(`
     <h2 class="display">Medicine Inventory</h2>${formCard}
@@ -4665,7 +4667,7 @@ function viewAdminPurchases(){
     <td><span class="badge ${p.paymentStatus==='paid'?'badge-ok':'badge-low'}">${p.paymentStatus==='paid'?'Paid':'Unpaid'}</span></td>
     <td class="row-actions">
       <button class="btn btn-outline btn-small" onclick="togglePurchasePayment('${p.id}')">${p.paymentStatus==='paid'?'Mark unpaid':'Mark paid'}</button>
-      <button class="btn btn-danger btn-small" onclick="deletePurchase('${p.id}')">Delete</button>
+      ${deleteBtn('deletePurchase', p.id)}
     </td>
   </tr>`).join('');
   const unpaid = state.data.unpaidPurchases;
@@ -4698,7 +4700,7 @@ function viewAdminAppointments(){
   const rows=state.data.appointments.map(a=>`<tr>
     <td>${escapeHtml(a.name)}</td><td class="mono">${escapeHtml(a.phone)}</td><td>${escapeHtml(a.consultationType||'—')}</td><td class="mono">${escapeHtml(a.date)}</td><td>${escapeHtml(a.reason)}</td>
     <td><select onchange="updateAppointmentStatus('${a.id}',this.value)">${['pending','confirmed','done','cancelled'].map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="sendAppointmentWhatsApp('${a.id}')">WhatsApp</button><button class="btn btn-danger btn-small" onclick="deleteAppointment('${a.id}')">Delete</button></td></tr>`).join('');
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="sendAppointmentWhatsApp('${a.id}')">WhatsApp</button>${deleteBtn('deleteAppointment', a.id)}</td></tr>`).join('');
   return adminShell(`<h2 class="display">Appointment Requests</h2>
     <div class="table-wrap">${state.data.appointments.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Preferred date</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">📅</div>No appointment requests yet.</div>`}</div>`);
 }
@@ -4709,7 +4711,7 @@ function viewAdminFeedback(){
     <td>${escapeHtml(f.name||'Anonymous')}${f.phone?`<br><span class="mono" style="color:var(--text-muted);font-size:12px;">${escapeHtml(f.phone)}</span>`:''}</td>
     <td class="mono" style="color:var(--accent);white-space:nowrap;">${stars(f.rating||0)}</td>
     <td>${escapeHtml(f.message||'')}</td>
-    <td class="row-actions">${f.phone?`<button class="btn btn-outline btn-small" onclick="sendFeedbackWhatsApp('${f.id}')">WhatsApp</button>`:''}<button class="btn btn-danger btn-small" onclick="deleteFeedback('${f.id}')">Delete</button></td></tr>`).join('');
+    <td class="row-actions">${f.phone?`<button class="btn btn-outline btn-small" onclick="sendFeedbackWhatsApp('${f.id}')">WhatsApp</button>`:''}${deleteBtn('deleteFeedback', f.id)}</td></tr>`).join('');
   return adminShell(`<h2 class="display">Feedback</h2>
     <div class="table-wrap">${state.data.feedback.length?`<table><thead><tr><th>Date</th><th>From</th><th>Rating</th><th>Message</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💬</div>No feedback submitted yet.</div>`}</div>`);
 }
@@ -4770,7 +4772,7 @@ function viewAdminAttendance(){
       <td class="mono">${formatIST(a.loginAt)}</td>
       <td class="mono">${formatIST(a.logoutAt)}</td>
       <td class="mono">${duration}</td>
-      <td class="row-actions"><button class="btn btn-danger btn-small" onclick="deleteAttendance('${a.id}')">Delete</button></td>
+      <td class="row-actions">${deleteBtn('deleteAttendance', a.id)}</td>
     </tr>`;
   }).join('');
   return adminShell(`
@@ -4827,7 +4829,7 @@ function viewAdminCleanliness(){
         <strong>${escapeHtml(r.staffName||'')}</strong> ${ratingBadge(r.rating)}
         <div style="color:var(--text-muted);font-size:13px;">${escapeHtml(r.date||'')}${r.area?` · ${escapeHtml(r.area)}`:''}</div>
       </div>
-      <button class="btn btn-danger btn-small" onclick="deleteCleanlinessReport('${r.id}')">Delete</button>
+      ${deleteBtn('deleteCleanlinessReport', r.id)}
     </div>
     ${r.notes?`<p style="margin:10px 0 0;">${escapeHtml(r.notes)}</p>`:''}
     ${(r.photos&&r.photos.length)?`<div style="margin-top:10px;">${r.photos.map(src=>`<a href="${src}" target="_blank" rel="noopener"><img src="${src}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border);margin-right:6px;"></a>`).join('')}</div>`:''}
@@ -4982,7 +4984,7 @@ function viewAdminBlog(){
   const rows=posts.map(p=>`<div class="card" style="margin-bottom:12px;">
     <div class="field"><label>Title</label><input type="text" value="${escapeHtml(p.title)}" onchange="updateBlogPost('${p.id}','title',this.value)"></div>
     <div class="field"><label>Body</label><textarea rows="3" onchange="updateBlogPost('${p.id}','body',this.value)">${escapeHtml(p.body)}</textarea></div>
-    <button class="btn btn-danger btn-small" onclick="removeBlogPost('${p.id}')">Delete post</button></div>`).join('');
+    ${deleteBtn('removeBlogPost', p.id, 'Delete post')}</div>`).join('');
   return adminShell(`<h2 class="display">Blog Posts</h2>
     <div class="row-actions" style="margin-bottom:16px;">
       <button class="btn btn-primary" onclick="addBlogPost()">+ New post</button>
