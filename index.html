@@ -3800,28 +3800,36 @@ window.sendDailySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
   if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
+  // Open the window synchronously, before the await below, so browsers (especially
+  // mobile) don't treat the popup as unrelated to the click and silently block it.
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   const today = todayISO();
   const text = await buildSummaryText('Daily summary', today, today);
-  window.open(waLinkWithText(target, text), '_blank');
+  w.location.href = waLinkWithText(target, text);
 };
 window.sendWeeklySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
   if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   const to = todayISO();
   const fromDateObj = new Date(); fromDateObj.setDate(fromDateObj.getDate()-6);
   const from = fromDateObj.toISOString().slice(0,10);
   const text = await buildSummaryText('Weekly summary (last 7 days)', from, to);
-  window.open(waLinkWithText(target, text), '_blank');
+  w.location.href = waLinkWithText(target, text);
 };
 window.sendMonthlySummary = async function(){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
   if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   const from = monthStartISO();
   const to = todayISO();
   const text = await buildSummaryText('Monthly summary', from, to);
-  window.open(waLinkWithText(target, text), '_blank');
+  w.location.href = waLinkWithText(target, text);
 };
 function tomorrowAppointmentsHtml(appts){
   return `<div class="card" style="margin-bottom:16px;">
