@@ -2181,7 +2181,6 @@ window.saveBillForm = async function(){
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
   showToast(editing?'👍 Bill updated! / ബിൽ അപ്ഡേറ്റ് ചെയ്തു!':'👍 Bill saved! / ബിൽ സേവ് ചെയ്തു!', 'success'); render();
   if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
-  if(!editing && data.patientPhone){ window.open(waLinkWithText(data.patientPhone, billThankYouMessage(data)), '_blank'); }
   printBill({id:ref.id, ...data});
 };
 window.deleteBill = async function(id){
@@ -2244,6 +2243,18 @@ window.sendBillWhatsApp = async function(id){
   const i = state.data.info;
   const msg = `Hi ${b.patientName}, here is your bill from ${i.clinicName}.\nBill No: ${b.billNumber}\nDate: ${b.date}\nTotal: ${money(b.grandTotal)}\nPayment: ${b.paymentMethod==='upi'?'UPI':'Cash'}\nThank you for visiting us.`;
   window.open(waLinkWithText(b.patientPhone, msg), '_blank');
+};
+window.sendBillThankYou = async function(id){
+  let b = state.data.bills.find(x=>x.id===id);
+  if(!b){
+    try{
+      const snap = await getDoc(doc(db,'bills',id));
+      if(snap.exists()) b = {id:snap.id, ...snap.data()};
+    }catch(e){ console.error(e); }
+  }
+  if(!b){ showToast('Could not find that bill. / ഈ ബിൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.'); return; }
+  if(!b.patientPhone){ showToast('No phone number on file for this patient. / ഈ രോഗിക്ക് ഫോൺ നമ്പർ രേഖപ്പെടുത്തിയിട്ടില്ല.'); return; }
+  window.open(waLinkWithText(b.patientPhone, billThankYouMessage(b)), '_blank');
 };
 window.emailBill = async function(id){
   let b = state.data.bills.find(x=>x.id===id);
@@ -4412,7 +4423,7 @@ function viewAdminBilling(){
     <td>${escapeHtml(b.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo||'')}</span></td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button>${deleteBtn('deleteBill', b.id)}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="sendBillThankYou('${b.id}')">Thank You Msg</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button>${deleteBtn('deleteBill', b.id)}</td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Billing</h2>
