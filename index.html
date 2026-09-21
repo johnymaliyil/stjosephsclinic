@@ -716,7 +716,7 @@ let state = {
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false, editingBill:null,
   billForm:{ visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -834,7 +834,7 @@ function billThankYouMessage(b){
 }
 function vitalsSummary(v){
   return [
-    v.weight?`Wt ${v.weight} kg`:'', v.height?`Ht ${v.height} cm`:'', v.bp?`BP ${v.bp}`:'',
+    v.weight?`Wt ${v.weight} kg`:'', v.height?`Ht ${v.height} cm`:'', v.temperature?`Temp ${v.temperature}°F`:'', v.bp?`BP ${v.bp}`:'',
     v.sugarValue?`Sugar ${v.sugarValue} mg/dL${v.sugarType?` (${v.sugarType})`:''}`:''
   ].filter(Boolean).join(' · ');
 }
@@ -1501,7 +1501,7 @@ function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
   state.visitFormErrors = null;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false };
 }
 async function loadLastVitals(patientId){
   try{
@@ -1512,9 +1512,9 @@ async function loadLastVitals(patientId){
     const snap = await getDocs(q);
     if(snap.empty) return null;
     const visits = snap.docs.map(d=>d.data()).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
-    const v = visits.find(x=>x.weight||x.height||x.bp||x.sugarValue);
+    const v = visits.find(x=>x.weight||x.height||x.temperature||x.bp||x.sugarValue);
     if(!v) return null;
-    return { date:v.date, weight:v.weight, height:v.height, bp:v.bp, sugarValue:v.sugarValue, sugarType:v.sugarType };
+    return { date:v.date, weight:v.weight, height:v.height, temperature:v.temperature, bp:v.bp, sugarValue:v.sugarValue, sugarType:v.sugarType };
   }catch(e){ console.error('Could not load last vitals', e); return null; }
 }
 async function loadPreviousVisits(patientId, excludeVisitId){
@@ -1634,7 +1634,7 @@ window.editVisit = async function(id){
     selectedPatient:{ id:v.patientId, name:v.patientName, opdNo:v.patientOpdNo, phone:v.patientPhone },
     date:v.date||todayISO(), reason:v.reason||'', doctorName:v.doctorName||'',
     meds:(v.medicines&&v.medicines.length)? v.medicines.map(m=>({source:m.source||(m.medicineId?'pharmacy':'outside'),medicineId:m.medicineId||'',name:m.name||'',quantity:m.quantity||'',dosage:m.dosage||''})) : [{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}],
-    weight:v.weight||'', height:v.height||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null,
+    weight:v.weight||'', height:v.height||'', temperature:v.temperature||'', bp:v.bp||'', sugarValue:v.sugarValue||'', sugarType:v.sugarType||'Random', lastVitals:null,
     previousVisits:[], previousVisitsLoading:true, showPreviousVisits:false
   };
   render(); window.scrollTo(0,0);
@@ -1668,6 +1668,7 @@ window.saveVisitForm = async function(){
   const doctorName = document.getElementById('vf-doctor').value;
   const weight = document.getElementById('vf-weight').value.trim();
   const height = document.getElementById('vf-height').value.trim();
+  const temperature = document.getElementById('vf-temperature').value.trim();
   const bp = document.getElementById('vf-bp').value.trim();
   const sugarValue = document.getElementById('vf-sugar-value').value.trim();
   const sugarType = document.getElementById('vf-sugar-type').value;
@@ -1697,7 +1698,7 @@ window.saveVisitForm = async function(){
     patientId:f.selectedPatient.id, patientName:f.selectedPatient.name, patientNameLower:(f.selectedPatient.name||'').toLowerCase(),
     patientOpdNo:f.selectedPatient.opdNo||'', patientPhone:f.selectedPatient.phone||'',
     date, reason, doctorName, medicines,
-    weight, height, bp, sugarValue, sugarType: sugarValue ? sugarType : ''
+    weight, height, temperature, bp, sugarValue, sugarType: sugarValue ? sugarType : ''
   };
   const batch = writeBatch(db);
   if(state.editingVisit){
@@ -4234,6 +4235,7 @@ function viewAdminVisits(){
     ${f.lastVitals ? `<p style="color:var(--text-muted);font-size:12px;margin:0 0 8px;">Last recorded ${escapeHtml(f.lastVitals.date||'')}: ${[
         f.lastVitals.weight?`Wt ${escapeHtml(f.lastVitals.weight)} kg`:'',
         f.lastVitals.height?`Ht ${escapeHtml(f.lastVitals.height)} cm`:'',
+        f.lastVitals.temperature?`Temp ${escapeHtml(f.lastVitals.temperature)}°F`:'',
         f.lastVitals.bp?`BP ${escapeHtml(f.lastVitals.bp)}`:'',
         f.lastVitals.sugarValue?`Sugar ${escapeHtml(f.lastVitals.sugarValue)} mg/dL (${escapeHtml(f.lastVitals.sugarType||'')})`:''
       ].filter(Boolean).join(' · ')}</p>` : ''}
@@ -4244,6 +4246,7 @@ function viewAdminVisits(){
       <div class="field"><label>Height (cm)</label><input id="vf-height" type="number" min="0" step="0.1" value="${escapeHtml(f.height)}">
         ${heightHint?`<p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">${escapeHtml(heightHint)}</p>`:''}
       </div>
+      <div class="field"><label>Temperature (°F)</label><input id="vf-temperature" type="number" min="0" step="0.1" value="${escapeHtml(f.temperature)}"></div>
       <div class="field"><label>Blood pressure</label><input id="vf-bp" type="text" placeholder="e.g. 120/80" value="${escapeHtml(f.bp)}"></div>
       <div class="field" style="grid-column:1/-1;max-width:340px;"><label>Blood sugar (mg/dL)</label>
         <div style="display:flex;gap:6px;">
