@@ -4246,7 +4246,9 @@ function viewAdminVisits(){
       <div class="field"><label>Height (cm)</label><input id="vf-height" type="number" min="0" step="0.1" value="${escapeHtml(f.height)}">
         ${heightHint?`<p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">${escapeHtml(heightHint)}</p>`:''}
       </div>
-      <div class="field"><label>Temperature (°C)</label><input id="vf-temperature" type="number" min="0" step="0.1" value="${escapeHtml(f.temperature)}"></div>
+      <div class="field"><label>Temperature (°C)</label><input id="vf-temperature" type="number" min="0" step="0.1" value="${escapeHtml(f.temperature)}">
+        <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Normal range: 36.1–37.2°C · Fever: 38°C or above</p>
+      </div>
       <div class="field"><label>Blood pressure</label><input id="vf-bp" type="text" placeholder="e.g. 120/80" value="${escapeHtml(f.bp)}"></div>
       <div class="field" style="grid-column:1/-1;max-width:340px;"><label>Blood sugar (mg/dL)</label>
         <div style="display:flex;gap:6px;">
