@@ -3775,7 +3775,7 @@ window.submitHealthCheck = function(){
   if(!f.age){ showToast('Please enter your age.'); return; }
   state.healthCheckResult = healthCheckRecommendations(f);
   render();
-  setTimeout(()=>{ document.getElementById('hc-result')?.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
+  setTimeout(()=>{ const hcResultEl = document.getElementById('hc-result'); if(hcResultEl) hcResultEl.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
 };
 function viewAdminLogin(){
   const loginCard = `<div class="card">
