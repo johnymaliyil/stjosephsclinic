@@ -251,6 +251,10 @@ function daysUntil(dateStr){
   return Math.round((d - new Date(new Date().toDateString())) / 86400000);
 }
 function escapeHtml(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function debounce(fn, delay){
+  let timer;
+  return function(...args){ clearTimeout(timer); timer = setTimeout(()=>fn.apply(this,args), delay); };
+}
 function loadingSkeleton(rows){
   const widths=['92%','76%','85%','62%','90%','70%'];
   return `<div style="padding:4px 0;">${Array.from({length:rows||5}).map((_,i)=>`<div class="skeleton-row" style="width:${widths[i%widths.length]};"></div>`).join('')}</div>`;
@@ -1373,7 +1377,7 @@ async function loadPatientsPage(reset){
   state.patientsLoading = false; render();
 }
 window.setPatientSearchField = function(v){ state.patientsSearchField=v; lastVisibleDoc=null; loadPatientsPage(true); };
-window.setPatientSearchTerm = function(v){ state.patientsSearchTerm=v; lastVisibleDoc=null; loadPatientsPage(true); };
+window.setPatientSearchTerm = debounce(function(v){ state.patientsSearchTerm=v; lastVisibleDoc=null; loadPatientsPage(true); }, 400);
 window.loadMorePatients = function(){ loadPatientsPage(false); };
 window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); state.patientFormErrors=null; render(); window.scrollTo(0,0); };
 window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await loadPatientsPage(true); };
@@ -1437,7 +1441,7 @@ async function loadVisitsPage(reset){
   }
   state.visitsLoading = false; render();
 }
-window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); };
+window.setVisitsSearchTerm = debounce(function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); }, 400);
 window.loadMoreVisits = function(){ loadVisitsPage(false); };
 window.viewPatientVisits = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
@@ -1577,8 +1581,7 @@ window.setVisitPatientSearchField = function(field){
   state.visitForm.patientResults = [];
   render();
 };
-window.searchVisitPatient = async function(term){
-  state.visitForm.patientQuery = term;
+const debouncedVisitPatientSearch = debounce(async function(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.visitForm.patientResults = []; render(); return; }
   try{
@@ -1589,6 +1592,10 @@ window.searchVisitPatient = async function(term){
     state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
+}, 400);
+window.searchVisitPatient = function(term){
+  state.visitForm.patientQuery = term;
+  debouncedVisitPatientSearch(term);
 };
 window.selectVisitPatient = async function(id){
   const p = state.visitForm.patientResults.find(x=>x.id===id);
@@ -1912,7 +1919,7 @@ async function loadBillsPage(reset){
   }
   state.billsLoading = false; render();
 }
-window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); };
+window.setBillsSearchTerm = debounce(function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); }, 400);
 window.loadMoreBills = function(){ loadBillsPage(false); };
 window.viewPatientBills = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
@@ -2066,8 +2073,7 @@ function medItemsFromVisit(visit){
     return { medicineId:m.medicineId, name:m.name||(med?med.name:''), quantity:m.quantity, unitPrice: med?(med.price||0):0 };
   });
 }
-window.searchBillVisit = async function(term){
-  state.billForm.visitQuery = term;
+const debouncedBillVisitSearch = debounce(async function(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.billForm.visitResults = []; render(); return; }
   try{
@@ -2078,6 +2084,10 @@ window.searchBillVisit = async function(term){
     state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Visit search failed: ${e.message||e} / സന്ദർശനം തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
+}, 400);
+window.searchBillVisit = function(term){
+  state.billForm.visitQuery = term;
+  debouncedBillVisitSearch(term);
 };
 window.selectBillVisit = async function(visitId){
   const v = state.billForm.visitResults.find(x=>x.id===visitId);
@@ -2443,7 +2453,7 @@ async function loadLabRecordsPage(reset){
   }
   state.labRecordsLoading = false; render();
 }
-window.setLabRecordsSearchTerm = function(v){ state.labRecordsSearchTerm=v; lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); };
+window.setLabRecordsSearchTerm = debounce(function(v){ state.labRecordsSearchTerm=v; lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); }, 400);
 window.loadMoreLabRecords = function(){ loadLabRecordsPage(false); };
 async function loadAttendancePage(reset){
   state.attendanceLoading = true; render();
@@ -2527,8 +2537,7 @@ window.setLabRecordPatientSearchField = function(field){
   state.labRecordForm.patientResults = [];
   render();
 };
-window.searchLabRecordPatient = async function(term){
-  state.labRecordForm.patientQuery = term;
+const debouncedLabRecordPatientSearch = debounce(async function(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.labRecordForm.patientResults = []; render(); return; }
   try{
@@ -2539,6 +2548,10 @@ window.searchLabRecordPatient = async function(term){
     state.labRecordForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
+}, 400);
+window.searchLabRecordPatient = function(term){
+  state.labRecordForm.patientQuery = term;
+  debouncedLabRecordPatientSearch(term);
 };
 window.selectLabRecordPatient = function(id){
   const p = state.labRecordForm.patientResults.find(x=>x.id===id);
@@ -2626,7 +2639,7 @@ async function loadVaccinationsPage(reset){
   }
   state.vaccinationsLoading = false; render();
 }
-window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); };
+window.setVaccinationsSearchTerm = debounce(function(v){ state.vaccinationsSearchTerm=v; lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); }, 400);
 window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
 function resetVaccinationForm(){
   state.showVaccinationForm = false;
@@ -2638,8 +2651,7 @@ window.setVaccinationPatientSearchField = function(field){
   state.vaccinationForm.patientResults = [];
   render();
 };
-window.searchVaccinationPatient = async function(term){
-  state.vaccinationForm.patientQuery = term;
+const debouncedVaccinationPatientSearch = debounce(async function(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.vaccinationForm.patientResults = []; render(); return; }
   try{
@@ -2650,6 +2662,10 @@ window.searchVaccinationPatient = async function(term){
     state.vaccinationForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
+}, 400);
+window.searchVaccinationPatient = function(term){
+  state.vaccinationForm.patientQuery = term;
+  debouncedVaccinationPatientSearch(term);
 };
 window.selectVaccinationPatient = function(id){
   const p = state.vaccinationForm.patientResults.find(x=>x.id===id);
