@@ -251,10 +251,6 @@ function daysUntil(dateStr){
   return Math.round((d - new Date(new Date().toDateString())) / 86400000);
 }
 function escapeHtml(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function debounce(fn, delay){
-  let timer;
-  return function(...args){ clearTimeout(timer); timer = setTimeout(()=>fn.apply(this,args), delay); };
-}
 function loadingSkeleton(rows){
   const widths=['92%','76%','85%','62%','90%','70%'];
   return `<div style="padding:4px 0;">${Array.from({length:rows||5}).map((_,i)=>`<div class="skeleton-row" style="width:${widths[i%widths.length]};"></div>`).join('')}</div>`;
@@ -1377,7 +1373,8 @@ async function loadPatientsPage(reset){
   state.patientsLoading = false; render();
 }
 window.setPatientSearchField = function(v){ state.patientsSearchField=v; lastVisibleDoc=null; loadPatientsPage(true); };
-window.setPatientSearchTerm = debounce(function(v){ state.patientsSearchTerm=v; lastVisibleDoc=null; loadPatientsPage(true); }, 400);
+window.setPatientSearchTerm = function(v){ state.patientsSearchTerm=v; };
+window.triggerPatientSearch = function(){ lastVisibleDoc=null; loadPatientsPage(true); };
 window.loadMorePatients = function(){ loadPatientsPage(false); };
 window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); state.patientFormErrors=null; render(); window.scrollTo(0,0); };
 window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await loadPatientsPage(true); };
@@ -1441,7 +1438,8 @@ async function loadVisitsPage(reset){
   }
   state.visitsLoading = false; render();
 }
-window.setVisitsSearchTerm = debounce(function(v){ state.visitsSearchTerm=v; lastVisibleVisitDoc=null; loadVisitsPage(true); }, 400);
+window.setVisitsSearchTerm = function(v){ state.visitsSearchTerm=v; };
+window.triggerVisitsSearch = function(){ lastVisibleVisitDoc=null; loadVisitsPage(true); };
 window.loadMoreVisits = function(){ loadVisitsPage(false); };
 window.viewPatientVisits = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
@@ -1581,7 +1579,7 @@ window.setVisitPatientSearchField = function(field){
   state.visitForm.patientResults = [];
   render();
 };
-const debouncedVisitPatientSearch = debounce(async function(term){
+async function runVisitPatientSearch(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.visitForm.patientResults = []; render(); return; }
   try{
@@ -1592,10 +1590,12 @@ const debouncedVisitPatientSearch = debounce(async function(term){
     state.visitForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
-}, 400);
+}
 window.searchVisitPatient = function(term){
   state.visitForm.patientQuery = term;
-  debouncedVisitPatientSearch(term);
+};
+window.triggerVisitPatientSearch = function(){
+  runVisitPatientSearch(state.visitForm.patientQuery);
 };
 window.selectVisitPatient = async function(id){
   const p = state.visitForm.patientResults.find(x=>x.id===id);
@@ -1919,7 +1919,8 @@ async function loadBillsPage(reset){
   }
   state.billsLoading = false; render();
 }
-window.setBillsSearchTerm = debounce(function(v){ state.billsSearchTerm=v; lastVisibleBillDoc=null; loadBillsPage(true); }, 400);
+window.setBillsSearchTerm = function(v){ state.billsSearchTerm=v; };
+window.triggerBillsSearch = function(){ lastVisibleBillDoc=null; loadBillsPage(true); };
 window.loadMoreBills = function(){ loadBillsPage(false); };
 window.viewPatientBills = async function(patientId, patientName){
   const patient = state.data.patients.find(p=>p.id===patientId);
@@ -2073,7 +2074,7 @@ function medItemsFromVisit(visit){
     return { medicineId:m.medicineId, name:m.name||(med?med.name:''), quantity:m.quantity, unitPrice: med?(med.price||0):0 };
   });
 }
-const debouncedBillVisitSearch = debounce(async function(term){
+async function runBillVisitSearch(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.billForm.visitResults = []; render(); return; }
   try{
@@ -2084,10 +2085,12 @@ const debouncedBillVisitSearch = debounce(async function(term){
     state.billForm.visitResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Visit search failed: ${e.message||e} / സന്ദർശനം തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
-}, 400);
+}
 window.searchBillVisit = function(term){
   state.billForm.visitQuery = term;
-  debouncedBillVisitSearch(term);
+};
+window.triggerBillVisitSearch = function(){
+  runBillVisitSearch(state.billForm.visitQuery);
 };
 window.selectBillVisit = async function(visitId){
   const v = state.billForm.visitResults.find(x=>x.id===visitId);
@@ -2453,7 +2456,8 @@ async function loadLabRecordsPage(reset){
   }
   state.labRecordsLoading = false; render();
 }
-window.setLabRecordsSearchTerm = debounce(function(v){ state.labRecordsSearchTerm=v; lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); }, 400);
+window.setLabRecordsSearchTerm = function(v){ state.labRecordsSearchTerm=v; };
+window.triggerLabRecordsSearch = function(){ lastVisibleLabRecordDoc=null; loadLabRecordsPage(true); };
 window.loadMoreLabRecords = function(){ loadLabRecordsPage(false); };
 async function loadAttendancePage(reset){
   state.attendanceLoading = true; render();
@@ -2537,7 +2541,7 @@ window.setLabRecordPatientSearchField = function(field){
   state.labRecordForm.patientResults = [];
   render();
 };
-const debouncedLabRecordPatientSearch = debounce(async function(term){
+async function runLabRecordPatientSearch(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.labRecordForm.patientResults = []; render(); return; }
   try{
@@ -2548,10 +2552,12 @@ const debouncedLabRecordPatientSearch = debounce(async function(term){
     state.labRecordForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
-}, 400);
+}
 window.searchLabRecordPatient = function(term){
   state.labRecordForm.patientQuery = term;
-  debouncedLabRecordPatientSearch(term);
+};
+window.triggerLabRecordPatientSearch = function(){
+  runLabRecordPatientSearch(state.labRecordForm.patientQuery);
 };
 window.selectLabRecordPatient = function(id){
   const p = state.labRecordForm.patientResults.find(x=>x.id===id);
@@ -2639,7 +2645,8 @@ async function loadVaccinationsPage(reset){
   }
   state.vaccinationsLoading = false; render();
 }
-window.setVaccinationsSearchTerm = debounce(function(v){ state.vaccinationsSearchTerm=v; lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); }, 400);
+window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; };
+window.triggerVaccinationsSearch = function(){ lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); };
 window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
 function resetVaccinationForm(){
   state.showVaccinationForm = false;
@@ -2651,7 +2658,7 @@ window.setVaccinationPatientSearchField = function(field){
   state.vaccinationForm.patientResults = [];
   render();
 };
-const debouncedVaccinationPatientSearch = debounce(async function(term){
+async function runVaccinationPatientSearch(term){
   const t = term.trim().toLowerCase();
   if(!t){ state.vaccinationForm.patientResults = []; render(); return; }
   try{
@@ -2662,10 +2669,12 @@ const debouncedVaccinationPatientSearch = debounce(async function(term){
     state.vaccinationForm.patientResults = snap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){ console.error(e); showToast(`Patient search failed: ${e.message||e} / രോഗിയെ തിരയാൻ കഴിഞ്ഞില്ല.`); }
   render();
-}, 400);
+}
 window.searchVaccinationPatient = function(term){
   state.vaccinationForm.patientQuery = term;
-  debouncedVaccinationPatientSearch(term);
+};
+window.triggerVaccinationPatientSearch = function(){
+  runVaccinationPatientSearch(state.vaccinationForm.patientQuery);
 };
 window.selectVaccinationPatient = function(id){
   const p = state.vaccinationForm.patientResults.find(x=>x.id===id);
@@ -4132,7 +4141,7 @@ function viewAdminPatients(){
       <option value="phone" ${state.patientsSearchField==='phone'?'selected':''}>Search by Phone</option>
       <option value="address" ${state.patientsSearchField==='address'?'selected':''}>Search by Address</option>
     </select>
-    <input type="text" placeholder="Type to search…" value="${escapeHtml(state.patientsSearchTerm)}" oninput="setPatientSearchTerm(this.value)">
+    <input type="text" placeholder="Type to search…" value="${escapeHtml(state.patientsSearchTerm)}" oninput="setPatientSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerPatientSearch()">
   </div>`;
   return adminShell(`
     <h2 class="display">OPD Patient Registration</h2>
@@ -4175,7 +4184,7 @@ function viewAdminVisits(){
             <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
             <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
           </select>
-          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)">
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVisitPatient(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVisitPatientSearch()">
         </div>
         ${state.visitFormErrors&&state.visitFormErrors.selectedPatient?`<p style="color:var(--danger);font-size:11px;margin:4px 0 0;">Required — ദയവായി ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക</p>`:''}
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVisitPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
@@ -4281,7 +4290,7 @@ function viewAdminVisits(){
         <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
       </div>
     </div>` : `<div class="search-row" style="margin-bottom:16px;">
-      <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)">
+      <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVisitsSearch()">
     </div>`}
     <div class="table-wrap">
       ${state.visitsLoading? loadingSkeleton(6) :
@@ -4304,7 +4313,7 @@ function viewAdminLabTests(){
             <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
             <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
           </select>
-          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchLabRecordPatient(this.value)">
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchLabRecordPatient(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerLabRecordPatientSearch()">
         </div>
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectLabRecordPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
@@ -4348,7 +4357,7 @@ function viewAdminLabTests(){
     <h2 class="display">Lab Tests</h2>
     ${formCard}
     <div class="search-row" style="margin-bottom:16px;">
-      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.labRecordsSearchTerm)}" oninput="setLabRecordsSearchTerm(this.value)">
+      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.labRecordsSearchTerm)}" oninput="setLabRecordsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerLabRecordsSearch()">
     </div>
     <div class="table-wrap">
       ${state.labRecordsLoading? loadingSkeleton(6) :
@@ -4372,7 +4381,7 @@ function viewAdminVaccinations(){
             <option value="name" ${f.patientSearchField==='name'?'selected':''}>Search by Name</option>
             <option value="opdNo" ${f.patientSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
           </select>
-          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVaccinationPatient(this.value)">
+          <input type="text" placeholder="${f.patientSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.patientQuery)}" oninput="searchVaccinationPatient(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVaccinationPatientSearch()">
         </div>
         ${f.patientResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.patientResults.map(p=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectVaccinationPatient('${p.id}')"><strong>${escapeHtml(p.name)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(p.opdNo||'')}</span> — ${escapeHtml(p.phone||'')}</div>`).join('')}</div>` : ''}
       </div>`;
@@ -4433,7 +4442,7 @@ function viewAdminVaccinations(){
     ${dueCard}
     ${formCard}
     <div class="search-row" style="margin-bottom:16px;">
-      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.vaccinationsSearchTerm)}" oninput="setVaccinationsSearchTerm(this.value)">
+      <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.vaccinationsSearchTerm)}" oninput="setVaccinationsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVaccinationsSearch()">
     </div>
     <div class="table-wrap">
       ${state.vaccinationsLoading? loadingSkeleton(5) :
@@ -4456,7 +4465,7 @@ function viewAdminBilling(){
             <option value="name" ${f.visitSearchField==='name'?'selected':''}>Search by Name</option>
             <option value="opdNo" ${f.visitSearchField==='opdNo'?'selected':''}>Search by OPD No.</option>
           </select>
-          <input type="text" placeholder="${f.visitSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.visitQuery)}" oninput="searchBillVisit(this.value)">
+          <input type="text" placeholder="${f.visitSearchField==='opdNo'?'Type OPD No.…':'Type patient name…'}" value="${escapeHtml(f.visitQuery)}" oninput="searchBillVisit(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerBillVisitSearch()">
         </div>
         ${f.visitResults.length? `<div class="card" style="margin-top:6px;padding:6px;">${f.visitResults.map(v=>`<div style="padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''" onclick="selectBillVisit('${v.id}')"><strong>${escapeHtml(v.patientName)}</strong> <span class="mono" style="color:var(--text-muted);">OPD ${escapeHtml(v.patientOpdNo||'')}</span> — ${escapeHtml(v.date||'')} ${v.billId?'<span class="badge badge-warn">Already billed</span>':''}</div>`).join('')}</div>` : (f.visitQuery.trim() ? `<p style="color:var(--text-muted);font-size:13px;margin-top:6px;">No matching visit found. Make sure a visit has been registered and saved for this patient first (Patient Visits → Register visit).</p>` : '')}
       </div>`;
@@ -4529,7 +4538,7 @@ function viewAdminBilling(){
       <div>Showing all bills for <strong>${escapeHtml(state.billsPatientFilter.name)}</strong></div>
       <button class="btn btn-outline btn-small" onclick="clearBillsPatientFilter()">Show all bills</button>
     </div>` : `<div class="search-row" style="margin-bottom:16px;">
-      <input type="text" placeholder="Search bills by patient name…" value="${escapeHtml(state.billsSearchTerm)}" oninput="setBillsSearchTerm(this.value)">
+      <input type="text" placeholder="Search bills by patient name…" value="${escapeHtml(state.billsSearchTerm)}" oninput="setBillsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerBillsSearch()">
     </div>`}
     <div class="table-wrap">
       ${state.billsLoading? loadingSkeleton(6) :
