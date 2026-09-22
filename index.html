@@ -554,8 +554,8 @@ window.setLang = function(lang){
   render();
 };
 
-const STAFF_NAMES = ['Sheena', 'Danny', 'Admin'];
-function isAdminStaff(){ return state.sessionStaffName === 'Admin'; }
+const STAFF_NAMES = ['Sheena', 'Danny', 'Doctor', 'Admin'];
+function isAdminStaff(){ return state.sessionStaffName === 'Admin' || state.sessionStaffName === 'Doctor'; }
 function deleteBtn(fn, id, label){ return isAdminStaff() ? `<button class="btn btn-danger btn-small" onclick="${fn}('${id}')">${label||'Delete'}</button>` : ''; }
 const HELP_GUIDES = [
   { icon:'🧑‍🤝‍🧑', title:'പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
@@ -5288,7 +5288,7 @@ function render(){
   let html;
   if(needsAuth && !state.isAdmin){ html = viewAdminLogin(); }
   else if(needsAuth && !state.sessionStaffName){ html = viewStaffSelectGate(); }
-  else if(needsAuth && !state.dailyReminderSeen && state.sessionStaffName!=='Admin'){ html = viewDailyReminderGate(); }
+  else if(needsAuth && !state.dailyReminderSeen && !isAdminStaff()){ html = viewDailyReminderGate(); }
   else{
     switch(state.view){
       case 'home': html=viewHome(); break;
