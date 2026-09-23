@@ -4623,9 +4623,9 @@ function reportTabCollections(){
 function reportTabPatients(){
   const totals = patientsReportTotals(state.reportPatients);
   const byDay = patientsReportByDay(state.reportPatients);
-  const dayRows = byDay.map(d=>`<tr>
+  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Patients registered on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Patients registered on ${escapeHtml(d.date)}')">${d.count}</span></td>
+    <td class="mono"><span class="report-amount">${d.count}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
     const patients = filteredReportPatients();
@@ -4671,10 +4671,10 @@ function reportTabVisits(){
       <td class="mono">${r.count}</td>
     </tr>`;
   }).join('');
-  const dayRows = byDay.map(d=>`<tr>
+  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">${d.count}</span></td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}','billed','Billed visits on ${escapeHtml(d.date)}')">${d.billed}</span></td>
+    <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">${d.count}</span></td>
+    <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}','billed','Billed visits on ${escapeHtml(d.date)}')">${d.billed}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
     const visits = filteredReportVisits();
@@ -4753,9 +4753,9 @@ function reportTabInventory(){
 function reportTabLabTests(){
   const totals = labReportTotals(state.reportLabRecords);
   const byDay = labReportByDay(state.reportLabRecords);
-  const dayRows = byDay.map(d=>`<tr>
+  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Lab tests on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
-    <td class="mono"><span class="report-amount" onclick="setReportDetailFilter('${d.date}',null,'Lab tests on ${escapeHtml(d.date)}')">${d.count}</span></td>
+    <td class="mono"><span class="report-amount">${d.count}</span></td>
     <td class="mono">₹${d.amount.toFixed(2)}</td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
