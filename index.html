@@ -556,6 +556,8 @@ window.setLang = function(lang){
 
 const STAFF_NAMES = ['Sheena', 'Danny', 'Doctor', 'Admin'];
 function isAdminStaff(){ return state.sessionStaffName === 'Admin' || state.sessionStaffName === 'Doctor'; }
+const STAFF_RESTRICTED_VIEWS = ['admin-dashboard', 'admin-reports', 'admin-blog', 'admin-whatsapp', 'admin-feedback'];
+const STAFF_DEFAULT_VIEW = 'admin-patients';
 function deleteBtn(fn, id, label){ return isAdminStaff() ? `<button class="btn btn-danger btn-small" onclick="${fn}('${id}')">${label||'Delete'}</button>` : ''; }
 const HELP_GUIDES = [
   { icon:'🧑‍🤝‍🧑', title:'പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
@@ -3856,20 +3858,21 @@ window.acknowledgeDailyReminder = function(){
 
 /* ---------- admin shell ---------- */
 function adminNavItems(){
-  return [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-vaccinations','Vaccinations'],['admin-reports','Reports'],
+  const items = [['admin-dashboard','Overview'],['admin-patients','Patients (OPD)'],['admin-visits','Patient Visits'],['admin-billing','Billing'],['admin-inventory','Medicine Inventory'],['admin-purchases','Medicine Purchases'],['admin-labtests','Lab Tests'],['admin-vaccinations','Vaccinations'],['admin-reports','Reports'],
     ['admin-appointments','Appointment Requests'],['admin-feedback','Feedback'],['admin-whatsapp','WhatsApp Campaigns'],['admin-attendance','Staff Attendance'],['admin-cleanliness','Cleanliness Reports'],['admin-backup','Backup / Export'],['admin-help','Help / സഹായം'],['admin-info','Clinic Info'],['admin-blog','Blog Posts']];
+  return isAdminStaff() ? items : items.filter(([v])=>!STAFF_RESTRICTED_VIEWS.includes(v));
 }
 function adminShell(content){
   return `<div class="admin-shell">
     <div class="admin-topbar-mobile">
       <button class="${state.view==='admin-info'?'active':''}" onclick="setView('admin-info')">⚙️ Clinic Info</button>
-      <button onclick="setView('home')">🌐 Public site</button>
+      ${isAdminStaff()?`<button onclick="setView('home')">🌐 Public site</button>`:''}
       <button onclick="adminLogout()">🚪 Log out</button>
     </div>
     <div class="admin-side">
       <h2>${escapeHtml(state.data.info.clinicName)}</h2>
       ${adminNavItems().map(([v,l])=>`<button class="${state.view===v?'active':''}" data-nav="${v}" onclick="setView('${v}')">${l}</button>`).join('')}
-      <button class="admin-side-extra" onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>
+      ${isAdminStaff()?`<button class="admin-side-extra" onclick="setView('home')" style="margin-top:10px;color:#C9C2AE;">View public site</button>`:''}
       <button class="admin-side-extra" onclick="adminLogout()" style="color:#E2A08C;">Log out</button>
     </div>
     <div class="admin-main">${state.toast?`<div class="top-alert${state.toastType==='success'?' top-alert-success':''}">${escapeHtml(state.toast)}</div>`:''}${viewHistory.length?`<button class="btn btn-outline btn-small" style="margin-bottom:14px;" onclick="goBackView()">← Back</button>`:''}${content}</div>
@@ -5305,13 +5308,14 @@ function render(){
   else if(needsAuth && !state.sessionStaffName){ html = viewStaffSelectGate(); }
   else if(needsAuth && !state.dailyReminderSeen && !isAdminStaff()){ html = viewDailyReminderGate(); }
   else{
-    switch(state.view){
+    const effectiveView = (!isAdminStaff() && STAFF_RESTRICTED_VIEWS.includes(state.view)) ? STAFF_DEFAULT_VIEW : state.view;
+    switch(effectiveView){
       case 'home': html=viewHome(); break;
       case 'about': html=viewAbout(); break;
       case 'services': html=viewServices(); break;
       case 'blog': html=viewBlog(); break;
       case 'book': html=viewBook(); break;
-      case 'admin-login': html= state.isAdmin ? viewAdminDashboard() : viewAdminLogin(); break;
+      case 'admin-login': html= state.isAdmin ? (state.sessionStaffName && !isAdminStaff() ? viewAdminPatients() : viewAdminDashboard()) : viewAdminLogin(); break;
       case 'admin-dashboard': html=viewAdminDashboard(); break;
       case 'admin-patients': html=viewAdminPatients(); break;
       case 'admin-visits': html=viewAdminVisits(); break;
