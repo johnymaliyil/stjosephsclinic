@@ -2205,7 +2205,7 @@ window.saveBillForm = async function(){
     if(delta) inventoryDelta[id] = delta;
   });
 
-  const walkInName = (f.walkInName||'').trim() || 'Walk-in customer';
+  const walkInName = (f.walkInName||'').trim() || 'Walk-in patient';
   const data = {
     billNumber,
     visitId: v ? v.id : null, patientId: v ? v.patientId : null,
@@ -2423,8 +2423,8 @@ function printBill(b){
     <div style="text-align:right;"><div class="muted">BILL NO.</div><strong>${escapeHtml(String(b.billNumber))}</strong><div class="muted" style="margin-top:6px;">DATE</div>${escapeHtml(b.date)}</div>
   </div>
   <div style="margin-bottom:14px;">
-    <div class="muted">${b.patientOpdNo?'PATIENT':'CUSTOMER'}</div>
-    <strong>${escapeHtml(b.patientName||'Walk-in customer')}</strong>${b.patientOpdNo?` &middot; OPD ${escapeHtml(b.patientOpdNo)}`:''}<br>
+    <div class="muted">PATIENT</div>
+    <strong>${escapeHtml(b.patientName||'Walk-in patient')}</strong>${b.patientOpdNo?` &middot; OPD ${escapeHtml(b.patientOpdNo)}`:''}<br>
     ${escapeHtml(b.patientPhone||'')}${b.visitDate?` &middot; Visit date: ${escapeHtml(b.visitDate)}`:''}
   </div>
   <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
@@ -4474,7 +4474,7 @@ function viewAdminBilling(){
   const f = state.billForm;
   const walkInBlock = `<div>
       <div class="form-grid">
-        <div class="field"><label>Customer name (optional)</label><input id="bf-walkin-name" type="text" placeholder="e.g. Walk-in customer" value="${escapeHtml(f.walkInName)}" onchange="state.billForm.walkInName=this.value;"></div>
+        <div class="field"><label>Patient name (optional)</label><input id="bf-walkin-name" type="text" placeholder="e.g. Walk-in patient" value="${escapeHtml(f.walkInName)}" onchange="state.billForm.walkInName=this.value;"></div>
         <div class="field"><label>Phone (optional)</label><input id="bf-walkin-phone" type="text" placeholder="For WhatsApp/SMS, if needed" value="${escapeHtml(f.walkInPhone)}" onchange="state.billForm.walkInPhone=this.value;"></div>
       </div>
       <p style="color:var(--text-muted);font-size:12px;margin:2px 0 0;">No OPD registration or visit is needed for this bill — add medicines/services below directly.</p>
@@ -4520,7 +4520,7 @@ function viewAdminBilling(){
       <button class="btn ${!f.walkIn?'btn-primary':'btn-outline'} btn-small" onclick="setBillWalkIn(false)">Patient visit</button>
       <button class="btn ${f.walkIn?'btn-primary':'btn-outline'} btn-small" onclick="setBillWalkIn(true)">Walk-in / Cash bill (no registration)</button>
     </div>` : ''}
-    <div class="field"><label>${f.walkIn?'Customer':'Patient visit'}</label>${f.walkIn?walkInBlock:visitBlock}</div>
+    <div class="field"><label>${f.walkIn?'Walk-in patient':'Patient visit'}</label>${f.walkIn?walkInBlock:visitBlock}</div>
     <label>Medicines</label>
     ${medRows || `<p style="color:var(--text-muted);font-size:13px;">No medicines yet — ${f.walkIn?'add one below':'select a visit above, or add one'}.</p>`}
     <button class="btn btn-outline btn-small" onclick="addBillMedItem()">+ Add medicine</button>
@@ -4555,7 +4555,7 @@ function viewAdminBilling(){
   const rows = state.data.bills.map(b=>`<tr>
     <td class="mono">${escapeHtml(b.date)}</td>
     <td class="mono">${escapeHtml(String(b.billNumber))}</td>
-    <td>${escapeHtml(b.patientName||'Walk-in customer')}${b.patientOpdNo?` <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo)}</span>`:''}</td>
+    <td>${escapeHtml(b.patientName||'Walk-in patient')}${b.patientOpdNo?` <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(b.patientOpdNo)}</span>`:''}</td>
     <td class="mono">₹${Number(b.grandTotal||0).toFixed(2)}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(b.enteredBy||'—')}${b.updatedBy?`<br>edited: ${escapeHtml(b.updatedBy)}`:''}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">Print</button><button class="btn btn-outline btn-small" onclick="sendBillWhatsApp('${b.id}')">WhatsApp</button><button class="btn btn-outline btn-small" onclick="sendBillThankYou('${b.id}')">Thank You Msg</button><button class="btn btn-outline btn-small" onclick="sendBillThankYouSms('${b.id}')">Send SMS</button><button class="btn btn-outline btn-small" onclick="emailBill('${b.id}')">Email</button><button class="btn btn-outline btn-small" onclick="notifyDoctorBill('${b.id}')">Notify Dr</button><button class="btn btn-outline btn-small" onclick="editBill('${b.id}')">Edit</button>${deleteBtn('deleteBill', b.id)}</td>
