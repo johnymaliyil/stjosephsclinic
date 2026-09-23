@@ -712,6 +712,7 @@ let state = {
   patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
+  summaryPreview:null,
   patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
@@ -3403,6 +3404,7 @@ window.setView = async function(v){
   pushViewHistory();
   state.view=v; state.loginError=''; state.editingPatient=null; state.editingMed=null;
   state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  state.summaryPreview=null;
   resetBillForm();
   if(v.startsWith('admin-') && v!=='admin-login'){ try{ localStorage.setItem('lastAdminView', v); }catch(e){} }
   render(); window.scrollTo(0,0);
@@ -4017,41 +4019,53 @@ async function buildSummaryText(label, fromDate, toDate){
   }
   return lines.join('\n');
 }
-window.sendDailySummary = async function(){
+async function showSummaryPreview(label, from, to){
   const i = state.data.info;
   const target = i.notifyWhatsapp || i.whatsapp;
   if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
-  // Open the window synchronously, before the await below, so browsers (especially
-  // mobile) don't treat the popup as unrelated to the click and silently block it.
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
+  state.summaryPreview = { label, target, text:'', loading:true };
+  render();
+  const text = await buildSummaryText(label, from, to);
+  if(!state.summaryPreview || state.summaryPreview.label!==label) return; // cancelled while loading
+  state.summaryPreview = { label, target, text, loading:false };
+  render();
+}
+window.sendDailySummary = async function(){
   const today = todayISO();
-  const text = await buildSummaryText('Daily summary', today, today);
-  w.location.href = waLinkWithText(target, text);
+  await showSummaryPreview('Daily summary', today, today);
 };
 window.sendWeeklySummary = async function(){
-  const i = state.data.info;
-  const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   const to = todayISO();
   const fromDateObj = new Date(); fromDateObj.setDate(fromDateObj.getDate()-6);
   const from = fromDateObj.toISOString().slice(0,10);
-  const text = await buildSummaryText('Weekly summary (last 7 days)', from, to);
-  w.location.href = waLinkWithText(target, text);
+  await showSummaryPreview('Weekly summary (last 7 days)', from, to);
 };
 window.sendMonthlySummary = async function(){
-  const i = state.data.info;
-  const target = i.notifyWhatsapp || i.whatsapp;
-  if(!target){ showToast('No notify WhatsApp number set — add one in Clinic Info. / "നോട്ടിഫൈ വാട്സ്ആപ്പ് നമ്പർ" സെറ്റ് ചെയ്തിട്ടില്ല — ക്ലിനിക്ക് ഇൻഫോയിൽ ചേർക്കുക.'); return; }
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to send the summary. / സമ്മറി അയക്കാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
   const from = monthStartISO();
   const to = todayISO();
-  const text = await buildSummaryText('Monthly summary', from, to);
-  w.location.href = waLinkWithText(target, text);
+  await showSummaryPreview('Monthly summary', from, to);
 };
+window.updateSummaryPreviewText = function(val){ if(state.summaryPreview) state.summaryPreview.text = val; };
+window.cancelSummaryPreview = function(){ state.summaryPreview = null; render(); };
+window.confirmSendSummaryWhatsApp = function(){
+  if(!state.summaryPreview) return;
+  const { target, text } = state.summaryPreview;
+  window.open(waLinkWithText(target, text), '_blank');
+  state.summaryPreview = null;
+  render();
+};
+function summaryPreviewHtml(p){
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--primary);">
+    <h3 style="margin-top:0;">${escapeHtml(p.label)} — preview</h3>
+    ${p.loading ? `<p style="color:var(--text-muted);">Preparing summary…</p>` : `
+    <p style="color:var(--text-muted);font-size:13px;margin-top:-6px;">Review the message below, edit it if needed, then send it as a WhatsApp message.</p>
+    <textarea rows="12" style="width:100%;font-family:inherit;white-space:pre-wrap;" onchange="updateSummaryPreviewText(this.value)">${escapeHtml(p.text)}</textarea>
+    <div class="row-actions" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="confirmSendSummaryWhatsApp()">Send via WhatsApp</button>
+      <button class="btn btn-outline" onclick="cancelSummaryPreview()">Cancel</button>
+    </div>`}
+  </div>`;
+}
 function tomorrowAppointmentsHtml(appts){
   return `<div class="card" style="margin-bottom:16px;">
     <h3 style="margin-top:0;">📅 ${appts.length} appointment${appts.length>1?'s':''} tomorrow</h3>
@@ -4108,6 +4122,7 @@ function viewAdminDashboard(){
       <button class="btn btn-outline btn-small" onclick="sendWeeklySummary()">📋 Send weekly summary</button>
       <button class="btn btn-outline btn-small" onclick="sendMonthlySummary()">📋 Send monthly summary</button>
     </div>
+    ${state.summaryPreview? summaryPreviewHtml(state.summaryPreview) : ''}
     ${lowStock.length? lowStockAlertHtml(lowStock) : ''}
     ${expiringMeds.length? expiringMedsAlertHtml(expiringMeds) : ''}
     ${(state.reorderAlerts&&state.reorderAlerts.length)? reorderAlertHtml(state.reorderAlerts) : ''}
