@@ -1756,6 +1756,33 @@ window.sendPrescriptionWhatsApp = async function(visitId){
   const msg = `Hi ${v.patientName}, here is your prescription from ${i.clinicName} (${v.date}):\n${meds || 'No medicines prescribed.'}${v.doctorName?`\n- ${v.doctorName}`:''}`;
   window.open(waLinkWithText(v.patientPhone, msg), '_blank');
 };
+// Prints via a hidden iframe instead of window.open()+document.write() into a new
+// tab/window. On mobile browsers (especially installed/PWA mode) window.open('', '_blank')
+// often doesn't open a real new tab -- it navigates the app's own webview to a blank
+// page, which then gets overwritten permanently with no way back. Printing from a
+// hidden iframe never navigates the app's own page away, so nothing gets stuck.
+function printHtmlDocument(html){
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  const cleanup = function(){ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); };
+  iframe.onload = function(){
+    try{
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }catch(e){ console.error('Print failed', e); }
+    if(iframe.contentWindow && iframe.contentWindow.addEventListener){
+      iframe.contentWindow.addEventListener('afterprint', cleanup);
+    }
+    setTimeout(cleanup, 60000);
+  };
+  document.body.appendChild(iframe);
+  iframe.srcdoc = html;
+}
 window.printPrescription = async function(visitId){
   let v = state.data.visits.find(x=>x.id===visitId);
   if(!v){
@@ -1799,12 +1826,7 @@ window.printPrescription = async function(visitId){
     <div class="sig-line">${v.doctorName?escapeHtml(v.doctorName):"Doctor's signature"}</div>
   </div>
   </body></html>`;
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print the prescription. / പ്രിസ്ക്രിപ്ഷൻ പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>w.print(), 300);
+  printHtmlDocument(html);
 };
 async function loadPatientVisitHistory(patientId){
   let patient = null;
@@ -1862,12 +1884,7 @@ window.printPatientHistory = async function(patientId){
   <h2 style="border-bottom:1px solid #1F4A42;padding-bottom:6px;">Visit history (${visits.length})</h2>
   ${visitRows || '<p class="muted">No visits recorded yet.</p>'}
   </body></html>`;
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print this history. / ചരിത്രം പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>w.print(), 300);
+  printHtmlDocument(html);
 };
 window.notifyDoctorPatientHistory = async function(patientId){
   const i = state.data.info;
@@ -2439,12 +2456,7 @@ function printBill(b){
   ${upiSection}
   <p class="muted" style="margin-top:30px;">Thank you.</p>
   </body></html>`;
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print the bill. / ബിൽ പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>w.print(), 300);
+  printHtmlDocument(html);
 }
 
 /* ---------- lab tests ---------- */
@@ -5184,10 +5196,7 @@ window.printHelpGuide = function(){
   <div class="row"><h1>${escapeHtml(i.clinicName)}</h1><div class="muted">സഹായം — ദിവസവും ചെയ്യുന്ന പ്രധാന കാര്യങ്ങൾക്കുള്ള വഴികാട്ടി</div></div>
   ${sections}
   </body></html>`;
-  const w = window.open('', '_blank');
-  if(!w){ showToast('Please allow popups to print this guide. / ഈ ഗൈഡ് പ്രിന്റ് ചെയ്യാൻ പോപ്പപ്പ് അനുവദിക്കുക.'); return; }
-  w.document.write(html); w.document.close(); w.focus();
-  setTimeout(()=>w.print(), 300);
+  printHtmlDocument(html);
 };
 function viewAdminBackup(){
   const busy = !!state.backupExporting;
