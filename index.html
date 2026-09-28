@@ -1771,14 +1771,20 @@ function printHtmlDocument(html){
   iframe.style.border = '0';
   const cleanup = function(){ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); };
   iframe.onload = function(){
-    try{
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    }catch(e){ console.error('Print failed', e); }
-    if(iframe.contentWindow && iframe.contentWindow.addEventListener){
-      iframe.contentWindow.addEventListener('afterprint', cleanup);
-    }
-    setTimeout(cleanup, 60000);
+    // Wait a beat before the blocking print dialog opens, so the browser has a chance
+    // to paint whatever the app just rendered (e.g. a bill's totals right after saving)
+    // -- without this, the print dialog can interrupt the paint and leave the page
+    // looking blank/stuck once the dialog is dismissed.
+    setTimeout(function(){
+      try{
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }catch(e){ console.error('Print failed', e); }
+      if(iframe.contentWindow && iframe.contentWindow.addEventListener){
+        iframe.contentWindow.addEventListener('afterprint', cleanup);
+      }
+      setTimeout(cleanup, 60000);
+    }, 300);
   };
   document.body.appendChild(iframe);
   iframe.srcdoc = html;
