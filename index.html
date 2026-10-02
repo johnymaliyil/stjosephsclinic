@@ -724,7 +724,7 @@ let state = {
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   summaryPreview:null,
-  patientCount:null, visitCount:null, followUpsDue:[], reorderAlerts:[],
+  patientCount:null, visitCount:null, monthPatientCount:null, monthVisitCount:null, followUpsDue:[], reorderAlerts:[],
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
@@ -3371,14 +3371,33 @@ if(isIos && !isStandalone){
 
 /* ---------- dashboard ---------- */
 async function loadDashboardStats(){
-  try{ state.patientCount = (await getCountFromServer(collection(db,'patients'))).data().count; }
-  catch(e){ console.error('Failed to load registered patient count', e); state.patientCount = null; }
-  try{ state.visitCount = (await getCountFromServer(collection(db,'visits'))).data().count; }
-  catch(e){ console.error('Failed to load patient visit count', e); state.visitCount = null; }
-  await Promise.all([loadMedicines(), loadAppointments()]);
-  state.followUpsDue = await loadFollowUpsDue();
-  await loadReorderAlerts();
-  await loadVaccinationsDue();
+  const monthStart = monthStartISO();
+  const monthStartMillis = new Date(monthStart+'T00:00:00').getTime();
+  // Fire every independent query together instead of one after another -- the
+  // only real dependency is loadReorderAlerts(), which reads state.data.medicines
+  // directly and so must wait for loadMedicines() to finish first.
+  const patientCountP = getCountFromServer(collection(db,'patients'))
+    .then(s=>s.data().count).catch(e=>{ console.error('Failed to load registered patient count', e); return null; });
+  const visitCountP = getCountFromServer(collection(db,'visits'))
+    .then(s=>s.data().count).catch(e=>{ console.error('Failed to load patient visit count', e); return null; });
+  const monthPatientCountP = getCountFromServer(query(collection(db,'patients'), where('registeredAtMillis','>=',monthStartMillis)))
+    .then(s=>s.data().count).catch(e=>{ console.error("Failed to load this month's patient count", e); return null; });
+  const monthVisitCountP = getCountFromServer(query(collection(db,'visits'), where('date','>=',monthStart)))
+    .then(s=>s.data().count).catch(e=>{ console.error("Failed to load this month's visit count", e); return null; });
+  const appointmentsP = loadAppointments();
+  const followUpsDueP = loadFollowUpsDue();
+  const vaccinationsDueP = loadVaccinationsDue();
+  const medicinesAndReorderP = loadMedicines().then(loadReorderAlerts);
+
+  const [patientCount, visitCount, monthPatientCount, monthVisitCount, followUpsDue] = await Promise.all([
+    patientCountP, visitCountP, monthPatientCountP, monthVisitCountP, followUpsDueP
+  ]);
+  state.patientCount = patientCount;
+  state.visitCount = visitCount;
+  state.monthPatientCount = monthPatientCount;
+  state.monthVisitCount = monthVisitCount;
+  state.followUpsDue = followUpsDue;
+  await Promise.all([appointmentsP, vaccinationsDueP, medicinesAndReorderP]);
 }
 async function loadFollowUpsDue(){
   try{
@@ -4176,6 +4195,8 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
+      <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.monthPatientCount===null?'…':state.monthPatientCount}</div><div class="label">New registrations this month</div></div>
+      <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.monthVisitCount===null?'…':state.monthVisitCount}</div><div class="label">Visits this month</div></div>
     </div>
     <div class="row-actions" style="margin-bottom:16px;flex-wrap:wrap;">
       <button class="btn btn-outline btn-small" onclick="sendDailySummary()">📋 Send today's summary</button>
