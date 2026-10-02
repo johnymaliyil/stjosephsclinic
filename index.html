@@ -4932,6 +4932,21 @@ function viewAdminReports(){
     ${body}
   `);
 }
+let medSearchRenderTimer = null;
+// This filter is purely local (no network query), so unlike the 9 search boxes
+// elsewhere, we re-render as the user types rather than waiting for Enter/blur --
+// but render() replaces the whole #app DOM, which would otherwise destroy this very
+// input and drop keyboard focus after every keystroke. Debounce the re-render and
+// restore focus + cursor position afterward so typing continues to work normally.
+window.setMedSearchTerm = function(v){
+  state.medSearch = v;
+  clearTimeout(medSearchRenderTimer);
+  medSearchRenderTimer = setTimeout(function(){
+    render();
+    const el = document.getElementById('inv-med-search');
+    if(el){ el.focus(); const len = el.value.length; el.setSelectionRange(len, len); }
+  }, 150);
+};
 function viewAdminInventory(){
   const m=state.editingMed;
   const search=state.medSearch.toLowerCase();
@@ -4963,7 +4978,7 @@ function viewAdminInventory(){
   </tr>`;}).join('');
   return adminShell(`
     <h2 class="display">Medicine Inventory</h2>${formCard}
-    <div class="toolbar"><input type="text" placeholder="Search by name or batch" value="${escapeHtml(state.medSearch)}" oninput="state.medSearch=this.value; render();"><span style="font-size:13px;color:var(--text-muted);">${list.length} item(s)</span></div>
+    <div class="toolbar"><input id="inv-med-search" type="text" placeholder="Search by name or batch" value="${escapeHtml(state.medSearch)}" oninput="setMedSearchTerm(this.value)"><span style="font-size:13px;color:var(--text-muted);">${list.length} item(s)</span></div>
     <div class="table-wrap">${list.length?`<table><thead><tr><th>Name</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Reorder at</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty-state"><div class="icon">💊</div>No medicines match your search yet.</div>`}</div>
   `);
 }
