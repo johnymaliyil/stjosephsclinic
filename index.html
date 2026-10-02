@@ -245,6 +245,15 @@ window.addEventListener('unhandledrejection', (e)=>{
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function monthStartISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
+// Always shows Indian Standard Time regardless of the device's own timezone setting,
+// since staff devices could in principle be misconfigured and records should read
+// consistently across all of them.
+function timeIST(millis){
+  if(!millis) return '';
+  try{
+    return new Date(millis).toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:true });
+  }catch(e){ return ''; }
+}
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr+'T00:00:00');
@@ -4662,6 +4671,7 @@ function reportTabCollections(){
     const rows = bills.map(b=>`<tr>
       <td class="mono">${escapeHtml(b.billNumber||'')}</td>
       <td class="mono">${escapeHtml(b.date||'')}</td>
+      <td class="mono">${timeIST(b.createdAtMillis)}</td>
       <td>${escapeHtml(b.patientName||'')}</td>
       <td>${b.paymentMethod==='upi'?'UPI':'Cash'}</td>
       <td class="mono">₹${(Number(b.grandTotal)||0).toFixed(2)}</td>
@@ -4669,7 +4679,7 @@ function reportTabCollections(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🧾</div>No bills match this filter.</div>`}
     </div>`;
   })() : '';
@@ -4705,11 +4715,12 @@ function reportTabPatients(){
       <td>${escapeHtml(p.gender||'')}</td>
       <td class="mono">${escapeHtml(p.age||'')}</td>
       <td class="mono">${escapeHtml((p.registeredAt||'').slice(0,10))}</td>
+      <td class="mono">${timeIST(p.registeredAtMillis)}</td>
       <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${p.id}','${safeName}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${p.id}','${safeName}')">Bills</button></td>
     </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th><th>Time (IST)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🗂️</div>No patients match this filter.</div>`}
     </div>`;
   })() : '';
@@ -4747,6 +4758,7 @@ function reportTabVisits(){
     const visits = filteredReportVisits();
     const rows = visits.map(v=>`<tr>
       <td class="mono">${escapeHtml(v.date||'')}</td>
+      <td class="mono">${timeIST(v.createdAtMillis)}</td>
       <td>${escapeHtml(v.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
       <td>${escapeHtml(v.reason||'')}</td>
       <td>${escapeHtml(v.doctorName||'')}</td>
@@ -4755,7 +4767,7 @@ function reportTabVisits(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${visits.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Reason</th><th>Doctor</th><th>Billed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${visits.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Reason</th><th>Doctor</th><th>Billed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🩺</div>No visits match this filter.</div>`}
     </div>`;
   })() : '';
@@ -4829,13 +4841,14 @@ function reportTabLabTests(){
     const records = filteredReportLabRecords();
     const rows = records.map(r=>`<tr>
       <td class="mono">${escapeHtml(r.date||'')}</td>
+      <td class="mono">${timeIST(r.createdAtMillis)}</td>
       <td>${escapeHtml(r.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
       <td>${escapeHtml(r.details||'')}</td>
       <td class="mono">₹${(Number(r.amount)||0).toFixed(2)}</td>
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${records.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Details</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${records.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Details</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🧪</div>No lab tests match this filter.</div>`}
     </div>`;
   })() : '';
@@ -4863,6 +4876,7 @@ function reportTabPurchases(){
     const purchases = filteredReportPurchases();
     const rows = purchases.map(p=>`<tr>
       <td class="mono">${escapeHtml(p.date||'')}</td>
+      <td class="mono">${timeIST(p.createdAtMillis)}</td>
       <td>${escapeHtml(p.distributorName||'')}</td>
       <td class="mono">${escapeHtml(p.invoiceNumber||'—')}</td>
       <td>${(p.items||[]).map(i=>`${escapeHtml(i.name)} × ${escapeHtml(String(i.quantity))}`).join(', ') || '—'}</td>
@@ -4871,7 +4885,7 @@ function reportTabPurchases(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${purchases.length? `<table><thead><tr><th>Date</th><th>Distributor</th><th>Invoice</th><th>Medicines</th><th>Total</th><th>Payment</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${purchases.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Distributor</th><th>Invoice</th><th>Medicines</th><th>Total</th><th>Payment</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">📦</div>No purchases match this filter.</div>`}
     </div>`;
   })() : '';
