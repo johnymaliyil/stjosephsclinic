@@ -3980,18 +3980,43 @@ async function buildSummaryText(label, fromDate, toDate){
   const i = state.data.info;
   const singleDay = fromDate===toDate;
   let visitsList = [], cashTotal = 0, upiTotal = 0;
-  try{
-    const visitSnap = await getDocs(query(collection(db,'visits'), where('date','>=',fromDate), where('date','<=',toDate)));
+  // Fire the visits and bills queries together instead of one after the other --
+  // on a slow connection, awaiting them sequentially doubled the wait for no reason
+  // since neither depends on the other's result.
+  const visitsReqPromise = getDocs(query(collection(db,'visits'), where('date','>=',fromDate), where('date','<=',toDate)))
+    .catch(e=>{ console.error('Could not load visits for summary', e); return null; });
+  const billsReqPromise = getDocs(query(collection(db,'bills'), where('date','>=',fromDate), where('date','<=',toDate)))
+    .catch(e=>{ console.error('Could not load bills for summary', e); return null; });
+
+  const visitSnap = await visitsReqPromise;
+  if(visitSnap){
     visitsList = visitSnap.docs.map(d=>d.data()).sort((a,b)=>(a.createdAtMillis||0)-(b.createdAtMillis||0));
-  }catch(e){ console.error('Could not load visits for summary', e); }
-  try{
-    const billSnap = await getDocs(query(collection(db,'bills'), where('date','>=',fromDate), where('date','<=',toDate)));
+  }
+  // Kick off per-patient age lookups (daily summary only) as soon as we know who
+  // visited, while the bills query above may still be in flight -- rather than
+  // waiting for bills to finish first and only then starting these.
+  const patientAges = {};
+  const patientAgesPromise = (singleDay && visitsList.length) ? (async()=>{
+    try{
+      const patientIds = [...new Set(visitsList.map(v=>v.patientId).filter(Boolean))];
+      await Promise.all(patientIds.map(async pid=>{
+        try{
+          const snap = await getDoc(doc(db,'patients',pid));
+          if(snap.exists() && snap.data().age) patientAges[pid] = snap.data().age;
+        }catch(e){ console.error('Could not load patient age', e); }
+      }));
+    }catch(e){ console.error('Could not load patient ages for summary', e); }
+  })() : Promise.resolve();
+
+  const billSnap = await billsReqPromise;
+  if(billSnap){
     billSnap.docs.forEach(d=>{
       const b = d.data();
       const amt = Number(b.grandTotal)||0;
       if(b.paymentMethod==='upi') upiTotal += amt; else cashTotal += amt;
     });
-  }catch(e){ console.error('Could not load bills for summary', e); }
+  }
+  await patientAgesPromise;
   const meds = state.data.medicines;
   const lowStockCount = meds.filter(m=>medStatus(m).label==='Low stock').length;
   const expiringCount = meds.filter(m=>['Expired','Expiring soon'].includes(medStatus(m).label)).length;
@@ -4008,16 +4033,6 @@ async function buildSummaryText(label, fromDate, toDate){
   if(vaccinationsDueCount) lines.push(`💉 ${vaccinationsDueCount} vaccination${vaccinationsDueCount>1?'s':''} due`);
   if(singleDay && visitsList.length){
     const MAX_VISITS = 20;
-    const patientAges = {};
-    try{
-      const patientIds = [...new Set(visitsList.map(v=>v.patientId).filter(Boolean))];
-      await Promise.all(patientIds.map(async pid=>{
-        try{
-          const snap = await getDoc(doc(db,'patients',pid));
-          if(snap.exists() && snap.data().age) patientAges[pid] = snap.data().age;
-        }catch(e){ console.error('Could not load patient age', e); }
-      }));
-    }catch(e){ console.error('Could not load patient ages for summary', e); }
     lines.push('', 'Visit details:');
     visitsList.slice(0,MAX_VISITS).forEach(v=>{
       const age = patientAges[v.patientId];
