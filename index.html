@@ -3435,31 +3435,44 @@ if(isIos && !isStandalone){
 async function loadDashboardStats(){
   const monthStart = monthStartISO();
   const monthStartMillis = new Date(monthStart+'T00:00:00').getTime();
-  // Fire every independent query together instead of one after another -- the
-  // only real dependency is loadReorderAlerts(), which reads state.data.medicines
-  // directly and so must wait for loadMedicines() to finish first.
-  const patientCountP = getCountFromServer(collection(db,'patients'))
-    .then(s=>s.data().count).catch(e=>{ console.error('Failed to load registered patient count', e); return null; });
-  const visitCountP = getCountFromServer(collection(db,'visits'))
-    .then(s=>s.data().count).catch(e=>{ console.error('Failed to load patient visit count', e); return null; });
-  const monthPatientCountP = getCountFromServer(query(collection(db,'patients'), where('registeredAtMillis','>=',monthStartMillis)))
-    .then(s=>s.data().count).catch(e=>{ console.error("Failed to load this month's patient count", e); return null; });
-  const monthVisitCountP = getCountFromServer(query(collection(db,'visits'), where('date','>=',monthStart)))
-    .then(s=>s.data().count).catch(e=>{ console.error("Failed to load this month's visit count", e); return null; });
-  const appointmentsP = loadAppointments();
-  const followUpsDueP = loadFollowUpsDue();
-  const vaccinationsDueP = loadVaccinationsDue();
-  const medicinesAndReorderP = loadMedicines().then(loadReorderAlerts);
+  // Fire every independent query together instead of one after another, and paint
+  // each one onto the screen as soon as it individually resolves -- on a slow
+  // connection, batching them all behind one Promise.all meant nothing appeared
+  // until the single slowest query finished, which looked like the page was stuck
+  // even though faster results (e.g. the plain patient/visit counts) were already
+  // sitting there ready. The only real dependency is loadReorderAlerts(), which
+  // reads state.data.medicines directly and so must wait for loadMedicines() first.
+  const track = (promise, assign) => promise.then(value=>{ assign(value); render(); });
 
-  const [patientCount, visitCount, monthPatientCount, monthVisitCount, followUpsDue] = await Promise.all([
-    patientCountP, visitCountP, monthPatientCountP, monthVisitCountP, followUpsDueP
+  const patientCountP = track(
+    getCountFromServer(collection(db,'patients')).then(s=>s.data().count)
+      .catch(e=>{ console.error('Failed to load registered patient count', e); return null; }),
+    v=>{ state.patientCount = v; }
+  );
+  const visitCountP = track(
+    getCountFromServer(collection(db,'visits')).then(s=>s.data().count)
+      .catch(e=>{ console.error('Failed to load patient visit count', e); return null; }),
+    v=>{ state.visitCount = v; }
+  );
+  const monthPatientCountP = track(
+    getCountFromServer(query(collection(db,'patients'), where('registeredAtMillis','>=',monthStartMillis))).then(s=>s.data().count)
+      .catch(e=>{ console.error("Failed to load this month's patient count", e); return null; }),
+    v=>{ state.monthPatientCount = v; }
+  );
+  const monthVisitCountP = track(
+    getCountFromServer(query(collection(db,'visits'), where('date','>=',monthStart))).then(s=>s.data().count)
+      .catch(e=>{ console.error("Failed to load this month's visit count", e); return null; }),
+    v=>{ state.monthVisitCount = v; }
+  );
+  const followUpsDueP = track(loadFollowUpsDue(), v=>{ state.followUpsDue = v; });
+  const appointmentsP = loadAppointments().then(render);
+  const vaccinationsDueP = loadVaccinationsDue().then(render);
+  const medicinesAndReorderP = loadMedicines().then(()=>{ render(); return loadReorderAlerts(); }).then(render);
+
+  await Promise.all([
+    patientCountP, visitCountP, monthPatientCountP, monthVisitCountP, followUpsDueP,
+    appointmentsP, vaccinationsDueP, medicinesAndReorderP
   ]);
-  state.patientCount = patientCount;
-  state.visitCount = visitCount;
-  state.monthPatientCount = monthPatientCount;
-  state.monthVisitCount = monthVisitCount;
-  state.followUpsDue = followUpsDue;
-  await Promise.all([appointmentsP, vaccinationsDueP, medicinesAndReorderP]);
 }
 async function loadFollowUpsDue(){
   try{
