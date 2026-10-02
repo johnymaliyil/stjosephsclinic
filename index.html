@@ -724,7 +724,7 @@ let state = {
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   summaryPreview:null,
-  patientCount:null, visitCount:null, monthPatientCount:null, monthVisitCount:null, followUpsDue:[], reorderAlerts:[],
+  visitCount:null, monthPatientCount:null, monthVisitCount:null, followUpsDue:[], reorderAlerts:[],
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null, visitsMonthFilter:false,
@@ -3444,11 +3444,6 @@ async function loadDashboardStats(){
   // reads state.data.medicines directly and so must wait for loadMedicines() first.
   const track = (promise, assign) => promise.then(value=>{ assign(value); render(); });
 
-  const patientCountP = track(
-    getCountFromServer(collection(db,'patients')).then(s=>s.data().count)
-      .catch(e=>{ console.error('Failed to load registered patient count', e); return null; }),
-    v=>{ state.patientCount = v; }
-  );
   const visitCountP = track(
     getCountFromServer(collection(db,'visits')).then(s=>s.data().count)
       .catch(e=>{ console.error('Failed to load patient visit count', e); return null; }),
@@ -3470,7 +3465,7 @@ async function loadDashboardStats(){
   const medicinesAndReorderP = loadMedicines().then(()=>{ render(); return loadReorderAlerts(); }).then(render);
 
   await Promise.all([
-    patientCountP, visitCountP, monthPatientCountP, monthVisitCountP, followUpsDueP,
+    visitCountP, monthPatientCountP, monthVisitCountP, followUpsDueP,
     appointmentsP, vaccinationsDueP, medicinesAndReorderP
   ]);
 }
@@ -4274,7 +4269,6 @@ function viewAdminDashboard(){
   return adminShell(`
     <h2 class="display">Overview</h2>
     <div class="stat-row">
-      <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
       <div class="stat-card stat-card-link" onclick="viewPatientsRegisteredThisMonth()"><div class="num">${state.monthPatientCount===null?'…':state.monthPatientCount}</div><div class="label">New registrations this month</div></div>
