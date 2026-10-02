@@ -720,14 +720,14 @@ let state = {
   showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   chatOpen:false, chatMessages:[], chatTeaserVisible:false,
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
-  patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false,
+  patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false, patientsMonthFilter:false,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   summaryPreview:null,
   patientCount:null, visitCount:null, monthPatientCount:null, monthVisitCount:null, followUpsDue:[], reorderAlerts:[],
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
-  visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null,
+  visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null, visitsMonthFilter:false,
   visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false, editingBill:null,
@@ -1007,8 +1007,10 @@ window.removeBlogPost = async function(id){ await deleteDoc(doc(db,'blogPosts',i
 
 /* ---------- medicines ---------- */
 async function loadMedicines(){
-  const snap = await getDocs(collection(db,'medicines'));
-  state.data.medicines = snap.docs.map(d=>({id:d.id,...d.data()}));
+  try{
+    const snap = await getDocs(collection(db,'medicines'));
+    state.data.medicines = snap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.error('Failed to load medicines', e); }
 }
 function medStatus(m){
   const qty=Number(m.quantity), reorder=Number(m.reorderLevel||0), exp=daysUntil(m.expiry);
@@ -1252,8 +1254,10 @@ window.deleteCleanlinessReport = async function(id){
 
 /* ---------- appointments ---------- */
 async function loadAppointments(){
-  const snap = await getDocs(collection(db,'appointments'));
-  state.data.appointments = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  try{
+    const snap = await getDocs(collection(db,'appointments'));
+    state.data.appointments = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  }catch(e){ console.error('Failed to load appointments', e); }
 }
 window.submitAppointment = async function(){
   const name=document.getElementById('ap-name').value.trim();
@@ -1388,6 +1392,33 @@ window.setPatientSearchField = function(v){ state.patientsSearchField=v; lastVis
 window.setPatientSearchTerm = function(v){ state.patientsSearchTerm=v; };
 window.triggerPatientSearch = function(){ lastVisibleDoc=null; loadPatientsPage(true); };
 window.loadMorePatients = function(){ loadPatientsPage(false); };
+window.viewPatientsRegisteredThisMonth = async function(){
+  pushViewHistory();
+  state.view='admin-patients'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  state.patientsSearchTerm=''; state.patientsSearchField='name';
+  state.patientsMonthFilter = true;
+  try{ localStorage.setItem('lastAdminView','admin-patients'); }catch(e){}
+  lastVisibleDoc = null;
+  state.patientsLoading = true; render(); window.scrollTo(0,0);
+  try{
+    const monthStartMillis = new Date(monthStartISO()+'T00:00:00').getTime();
+    const q = query(collection(db,'patients'), where('registeredAtMillis','>=',monthStartMillis), orderBy('registeredAtMillis','desc'));
+    const snap = await getDocs(q);
+    state.data.patients = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.hasMorePatients = false;
+  }catch(e){
+    console.error(e);
+    showToast("Could not load this month's new registrations — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ഈ മാസത്തെ പുതിയ രജിസ്ട്രേഷനുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.");
+    state.data.patients = [];
+  }
+  state.patientsLoading = false; render();
+};
+window.clearPatientsMonthFilter = function(){
+  state.patientsMonthFilter = false;
+  lastVisibleDoc = null;
+  loadPatientsPage(true);
+};
 window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); state.patientFormErrors=null; render(); window.scrollTo(0,0); };
 window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await loadPatientsPage(true); };
 window.savePatientForm = async function(){
@@ -1462,6 +1493,7 @@ window.viewPatientVisits = async function(patientId, patientName){
   resetVisitForm();
   state.visitsSearchTerm = '';
   state.visitsPatientFilter = { id:patientId, name: patientName || (patient?patient.name:'') };
+  state.visitsMonthFilter = false;
   try{ localStorage.setItem('lastAdminView','admin-visits'); }catch(e){}
   lastVisibleVisitDoc = null;
   state.visitsLoading = true; render(); window.scrollTo(0,0);
@@ -1482,6 +1514,36 @@ window.viewPatientVisits = async function(patientId, patientName){
 };
 window.clearVisitsPatientFilter = function(){
   state.visitsPatientFilter = null;
+  lastVisibleVisitDoc = null;
+  loadVisitsPage(true);
+};
+window.viewVisitsThisMonth = async function(){
+  pushViewHistory();
+  state.view='admin-visits'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  resetBillForm();
+  resetVisitForm();
+  state.visitsSearchTerm = '';
+  state.visitsPatientFilter = null;
+  state.visitsMonthFilter = true;
+  try{ localStorage.setItem('lastAdminView','admin-visits'); }catch(e){}
+  lastVisibleVisitDoc = null;
+  state.visitsLoading = true; render(); window.scrollTo(0,0);
+  try{
+    const q = query(collection(db,'visits'), where('date','>=',monthStartISO()), orderBy('date','desc'));
+    const snap = await getDocs(q);
+    state.data.visits = snap.docs.map(d=>({id:d.id,...d.data()}));
+    state.hasMoreVisits = false;
+    await loadMedicines();
+  }catch(e){
+    console.error(e);
+    showToast("Could not load this month's visits — if Firestore shows an index error in the browser console, click the link it gives you to auto-create it. / ഈ മാസത്തെ സന്ദർശനങ്ങൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.");
+    state.data.visits = [];
+  }
+  state.visitsLoading = false; render();
+};
+window.clearVisitsMonthFilter = function(){
+  state.visitsMonthFilter = false;
   lastVisibleVisitDoc = null;
   loadVisitsPage(true);
 };
@@ -3457,38 +3519,45 @@ window.setView = async function(v){
   if(v.startsWith('admin-') && v!=='admin-login'){ try{ localStorage.setItem('lastAdminView', v); }catch(e){} }
   render(); window.scrollTo(0,0);
   if(!v.startsWith('admin-')) trackPageView();
-  if(v==='home'||v==='blog') await loadBlogPosts();
-  if(v==='admin-dashboard') await loadDashboardStats();
-  if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
-  if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
-  if(v==='admin-labtests'){
-    resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
-    if(state.labRecordPrefillVisit){
-      const pv = state.labRecordPrefillVisit;
-      state.labRecordForm.selectedPatient = { id:pv.patientId, name:pv.patientName, opdNo:pv.patientOpdNo, phone:pv.patientPhone };
-      state.labRecordPrefillVisit = null;
-      state.showLabRecordForm = true;
+  try{
+    if(v==='home'||v==='blog') await loadBlogPosts();
+    if(v==='admin-dashboard') await loadDashboardStats();
+    if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
+    if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
+    if(v==='admin-labtests'){
+      resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
+      if(state.labRecordPrefillVisit){
+        const pv = state.labRecordPrefillVisit;
+        state.labRecordForm.selectedPatient = { id:pv.patientId, name:pv.patientName, opdNo:pv.patientOpdNo, phone:pv.patientPhone };
+        state.labRecordPrefillVisit = null;
+        state.showLabRecordForm = true;
+      }
     }
-  }
-  if(v==='admin-vaccinations'){
-    resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
-    await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
-  }
-  if(v==='admin-billing'){
-    state.billsSearchTerm=''; lastVisibleBillDoc=null;
-    await Promise.all([loadBillsPage(true), loadMedicines()]);
-    if(state.billingPrefillVisit){ await selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
-  }
-  if(v==='admin-reports') await reloadCurrentReportTab();
-  if(v==='admin-inventory'){ await loadMedicines(); await loadReorderAlerts(); }
-  if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]); }
-  if(v==='admin-appointments') await loadAppointments();
-  if(v==='admin-feedback') await loadFeedback();
-  if(v==='admin-whatsapp') await loadWhatsappCampaigns();
-  if(v==='admin-attendance'){ lastVisibleAttendanceDoc=null; await loadAttendancePage(true); }
-  if(v==='admin-cleanliness'){ resetCleanlinessForm(); lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true); }
-  if(v==='healthcheck'){
-    state.healthCheckForm = { age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }; state.healthCheckResult = null;
+    if(v==='admin-vaccinations'){
+      resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
+      await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
+    }
+    if(v==='admin-billing'){
+      state.billsSearchTerm=''; lastVisibleBillDoc=null;
+      await Promise.all([loadBillsPage(true), loadMedicines()]);
+      if(state.billingPrefillVisit){ await selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
+    }
+    if(v==='admin-reports') await reloadCurrentReportTab();
+    if(v==='admin-inventory'){ await loadMedicines(); await loadReorderAlerts(); }
+    if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]); }
+    if(v==='admin-appointments') await loadAppointments();
+    if(v==='admin-feedback') await loadFeedback();
+    if(v==='admin-whatsapp') await loadWhatsappCampaigns();
+    if(v==='admin-attendance'){ lastVisibleAttendanceDoc=null; await loadAttendancePage(true); }
+    if(v==='admin-cleanliness'){ resetCleanlinessForm(); lastVisibleCleanlinessDoc=null; await loadCleanlinessReportsPage(true); }
+    if(v==='healthcheck'){
+      state.healthCheckForm = { age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }; state.healthCheckResult = null;
+    }
+  }catch(e){
+    // Whatever failed above, still show whatever data DID load successfully --
+    // an uncaught rejection here used to skip this final render() entirely,
+    // leaving the whole page stuck showing its initial loading state.
+    console.error('Failed to load data for view', v, e);
   }
   render();
 };
@@ -4195,8 +4264,8 @@ function viewAdminDashboard(){
       <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.patientCount===null?'…':state.patientCount}</div><div class="label">Registered patients</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.visitCount===null?'…':state.visitCount}</div><div class="label">Patient visits</div></div>
       <div class="stat-card stat-card-link" onclick="setView('admin-inventory')"><div class="num">${meds.length}</div><div class="label">Medicines in stock list</div></div>
-      <div class="stat-card stat-card-link" onclick="setView('admin-patients')"><div class="num">${state.monthPatientCount===null?'…':state.monthPatientCount}</div><div class="label">New registrations this month</div></div>
-      <div class="stat-card stat-card-link" onclick="setView('admin-visits')"><div class="num">${state.monthVisitCount===null?'…':state.monthVisitCount}</div><div class="label">Visits this month</div></div>
+      <div class="stat-card stat-card-link" onclick="viewPatientsRegisteredThisMonth()"><div class="num">${state.monthPatientCount===null?'…':state.monthPatientCount}</div><div class="label">New registrations this month</div></div>
+      <div class="stat-card stat-card-link" onclick="viewVisitsThisMonth()"><div class="num">${state.monthVisitCount===null?'…':state.monthVisitCount}</div><div class="label">Visits this month</div></div>
     </div>
     <div class="row-actions" style="margin-bottom:16px;flex-wrap:wrap;">
       <button class="btn btn-outline btn-small" onclick="sendDailySummary()">📋 Send today's summary</button>
@@ -4257,7 +4326,10 @@ function viewAdminPatients(){
   </div>`;
   return adminShell(`
     <h2 class="display">OPD Patient Registration</h2>
-    ${formCard}${searchRow}
+    ${formCard}${state.patientsMonthFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>Showing patients registered this month</div>
+      <button class="btn btn-outline btn-small" onclick="clearPatientsMonthFilter()">Show all patients</button>
+    </div>` : searchRow}
     <div class="table-wrap">
       ${state.patientsLoading? loadingSkeleton(6) :
         rows? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Address</th><th>Phone</th><th>Email</th><th>Gender</th><th>Age</th><th>Registered</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -4405,6 +4477,9 @@ function viewAdminVisits(){
         <button class="btn btn-outline btn-small" onclick="notifyDoctorPatientHistory('${state.visitsPatientFilter.id}')">📱 Notify doctor</button>
         <button class="btn btn-outline btn-small" onclick="clearVisitsPatientFilter()">Show all visits</button>
       </div>
+    </div>` : state.visitsMonthFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>Showing visits from this month</div>
+      <button class="btn btn-outline btn-small" onclick="clearVisitsMonthFilter()">Show all visits</button>
     </div>` : `<div class="search-row" style="margin-bottom:16px;">
       <input type="text" placeholder="Search visits by patient name…" value="${escapeHtml(state.visitsSearchTerm)}" oninput="setVisitsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVisitsSearch()">
     </div>`}
