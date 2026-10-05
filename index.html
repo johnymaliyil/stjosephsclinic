@@ -264,9 +264,20 @@ function loadingSkeleton(rows){
   const widths=['92%','76%','85%','62%','90%','70%'];
   return `<div style="padding:4px 0;">${Array.from({length:rows||5}).map((_,i)=>`<div class="skeleton-row" style="width:${widths[i%widths.length]};"></div>`).join('')}</div>`;
 }
-function waLink(phone){ return 'https://wa.me/'+String(phone||'').replace(/[^0-9]/g,''); }
+// Phone numbers are stored as plain 10-digit Indian mobile numbers (no country
+// code), but wa.me/sms: deep links need the full country code to reliably open a
+// chat with a number that isn't already a saved contact on the device -- without
+// it, WhatsApp silently fails to find the number. Mirrors the same normalization
+// already used server-side for WhatsApp campaigns (functions/index.js).
+function normalizePhoneIN(phone){
+  let digits = String(phone||'').replace(/[^0-9]/g,'');
+  if(digits.length===10) digits = '91'+digits;
+  else if(digits.length===11 && digits.startsWith('0')) digits = '91'+digits.slice(1);
+  return digits;
+}
+function waLink(phone){ return 'https://wa.me/'+normalizePhoneIN(phone); }
 function telLink(phone){ return 'tel:'+String(phone||'').replace(/[^0-9+]/g,''); }
-function smsLink(phone){ return 'sms:'+String(phone||'').replace(/[^0-9+]/g,''); }
+function smsLink(phone){ const d = normalizePhoneIN(phone); return 'sms:'+(d?'+'+d:''); }
 function smsLinkWithText(phone, text){ return smsLink(phone) + (text ? ('?body='+encodeURIComponent(text)) : ''); }
 function adBannerHtml(){
   const i = state.data.info;
