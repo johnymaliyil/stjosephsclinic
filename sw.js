@@ -15,13 +15,17 @@ self.addEventListener('activate', (event) => {
 
 // Network-first: always prefer the live site so a deploy is never masked by a
 // stale cache; the cached shell is only used as an offline fallback.
+// cache:'reload' forces an actual round trip to the server instead of letting
+// the browser's own HTTP cache silently satisfy the request with a stale
+// response -- without it, a deploy could still be masked on a device whose
+// browser cache hadn't expired yet, even though this handler calls fetch().
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'reload' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));

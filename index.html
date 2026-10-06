@@ -3600,6 +3600,30 @@ window.setView = async function(v){
 };
 function setView(v){ window.setView(v); }
 
+// Silently re-fetch the current view's data (e.g. when a tab/device regains
+// focus) using the same loaders setView uses, without resetting search terms,
+// pagination cursors, or any in-progress form -- so staff don't see stale data
+// on a second device, but also don't lose what they were typing.
+function refreshCurrentView(){
+  const v = state.view;
+  if(v==='admin-dashboard') return loadDashboardStats();
+  if(v==='admin-patients') return Promise.all([loadPatientsPage(true), computeNextOpdNo()]);
+  if(v==='admin-visits') return Promise.all([loadVisitsPage(true), loadMedicines()]);
+  if(v==='admin-labtests') return loadLabRecordsPage(true);
+  if(v==='admin-vaccinations') return Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+  if(v==='admin-billing') return Promise.all([loadBillsPage(true), loadMedicines()]);
+  if(v==='admin-reports') return reloadCurrentReportTab();
+  if(v==='admin-inventory') return Promise.all([loadMedicines(), loadReorderAlerts()]);
+  if(v==='admin-purchases') return Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]);
+  if(v==='admin-appointments') return loadAppointments();
+  if(v==='admin-feedback') return loadFeedback();
+  if(v==='admin-whatsapp') return loadWhatsappCampaigns();
+  if(v==='admin-attendance') return loadAttendancePage(true);
+  if(v==='admin-cleanliness') return loadCleanlinessReportsPage(true);
+  return Promise.resolve();
+}
+window.refreshCurrentView = refreshCurrentView;
+
 /* ---------- icons ---------- */
 function logoMark(){
   return `<svg width="28" height="28" viewBox="0 0 64 64" fill="none">
@@ -5585,6 +5609,27 @@ async function initApp(){
   }
 }
 initApp();
+
+// Multi-device fix: staff often keep the clinic open on two devices (e.g. an
+// iPad at the desk and a desktop at the counter). With no realtime Firestore
+// listeners, a tab only ever re-fetches data when the user navigates, so a
+// record saved on one device stayed invisible on the other until something
+// forced a reload. Silently refresh the current admin view's data whenever
+// the tab regains focus, reusing the same loaders setView uses.
+let lastVisibilityRefresh = 0;
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState !== 'visible') return;
+  if(!state.isAdmin || !state.sessionStaffName) return;
+  // render() fully replaces the DOM, which would steal focus (and can throw)
+  // if the user is mid-typing in a field when the refresh lands -- skip this
+  // round and let the next focus/visibility change try again.
+  const active = document.activeElement;
+  if(active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+  const now = Date.now();
+  if(now - lastVisibilityRefresh < 10000) return;
+  lastVisibilityRefresh = now;
+  refreshCurrentView().then(render).catch(e => console.error('Background refresh failed', e));
+});
 </script>
 </body>
 </html>
