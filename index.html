@@ -709,6 +709,7 @@ const DEFAULT_INFO = {
   foundedYear: 1950,
   founderPhotoUrl: "",
   upiId: "",
+  consultationFeeValidDays: 30,
   whatsapp: "9048869262",
   notifyEmail: "clinicstjos@gmail.com",
   notifyWhatsapp: "+919388823003",
@@ -917,6 +918,7 @@ window.saveClinicInfo = async function(){
   i.founderName = document.getElementById('if-founder-name').value.trim();
   i.founderPhotoUrl = document.getElementById('if-founder-photo').value.trim();
   i.upiId = document.getElementById('if-upi').value.trim();
+  i.consultationFeeValidDays = Number(document.getElementById('if-consultation-days').value) || 30;
   i.whatsapp = document.getElementById('if-whatsapp').value.trim();
   i.notifyEmail = document.getElementById('if-notify-email').value.trim();
   i.notifyWhatsapp = document.getElementById('if-notify-whatsapp').value.trim();
@@ -2193,23 +2195,23 @@ async function loadLastPaidConsultation(patientId){
     return bills[0] || null;
   }catch(e){ console.error('Could not check last paid consultation fee', e); return null; }
 }
-const CONSULTATION_FEE_VALID_DAYS = 30;
+function consultationFeeValidDays(){ return Number(state.data.info.consultationFeeValidDays)||30; }
 function consultationFeeStatus(lastBill, asOfDateStr){
   if(!lastBill || !lastBill.date) return { lastPaidDate:null, daysSince:null, feeDue:true };
   const asOf = new Date((asOfDateStr||todayISO())+'T00:00:00');
   const lastDate = new Date(lastBill.date+'T00:00:00');
   const daysSince = Math.round((asOf - lastDate) / 86400000);
-  return { lastPaidDate:lastBill.date, daysSince, feeDue: daysSince<0 || daysSince>=CONSULTATION_FEE_VALID_DAYS };
+  return { lastPaidDate:lastBill.date, daysSince, feeDue: daysSince<0 || daysSince>=consultationFeeValidDays() };
 }
 function consultationFeeStatusBanner(status){
   if(!status) return '';
   if(status.feeDue){
     const msg = status.lastPaidDate
-      ? `⚠️ Consultation fee due — last paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago, more than ${CONSULTATION_FEE_VALID_DAYS} days).`
+      ? `⚠️ Consultation fee due — last paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago, more than ${consultationFeeValidDays()} days).`
       : `⚠️ Consultation fee due — no previous consultation fee on record.`;
     return `<p style="background:var(--danger-soft);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;">${escapeHtml(msg)}</p>`;
   }
-  const daysLeft = CONSULTATION_FEE_VALID_DAYS - status.daysSince;
+  const daysLeft = consultationFeeValidDays() - status.daysSince;
   const msg = `✅ Consultation fee already paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago) — covers follow-ups for ${daysLeft} more day${daysLeft===1?'':'s'}.`;
   return `<p style="background:var(--success-soft);color:var(--success);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;">${escapeHtml(msg)}</p>`;
 }
@@ -2270,9 +2272,9 @@ async function selectBillVisitObject(v){
     }catch(e){ console.error('Could not check registration fee status', e); }
   }
 
-  // The consultation fee covers CONSULTATION_FEE_VALID_DAYS days, so default it
-  // on/off from that rule instead of asking every time -- the amount field
-  // above stays editable for a staff member who knows better for this visit.
+  // The consultation fee covers consultationFeeValidDays() days (set in Clinic
+  // Info), so default it on/off from that rule instead of asking every time --
+  // the amount field above stays editable for a staff member who knows better.
   let feeStatus = { lastPaidDate:null, daysSince:null, feeDue:true };
   if(v.patientId){
     try{
@@ -2283,8 +2285,8 @@ async function selectBillVisitObject(v){
   state.billForm.consultationFee = feeStatus.feeDue ? 200 : 0;
   state.billForm.consultationFeeNote = feeStatus.lastPaidDate
     ? (feeStatus.feeDue
-        ? `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — more than ${CONSULTATION_FEE_VALID_DAYS} days, so the fee is added. Remove it above if not needed.`
-        : `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — within the ${CONSULTATION_FEE_VALID_DAYS}-day free follow-up window, so no fee was added. Add one above if this visit needs a fresh consultation.`)
+        ? `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — more than ${consultationFeeValidDays()} days, so the fee is added. Remove it above if not needed.`
+        : `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — within the ${consultationFeeValidDays()}-day free follow-up window, so no fee was added. Add one above if this visit needs a fresh consultation.`)
     : `No previous consultation fee on record, so the fee is added. Remove it above if not needed.`;
 }
 window.clearBillVisit = function(){ state.billForm.selectedVisit = null; state.billForm.medItems = []; render(); };
@@ -5520,6 +5522,12 @@ function viewAdminInfo(){
       </div>
       <p style="color:var(--text-muted);font-size:13px;">Also shows a "Notify Dr" button on saved visits and bills, which opens a pre-filled WhatsApp chat to the number below with the same details (no WhatsApp Business API, so a staff member still taps Send).</p>
       <div class="field" style="max-width:280px;"><label>Notify WhatsApp number (with country code)</label><input id="if-notify-whatsapp" type="text" placeholder="+91XXXXXXXXXX" value="${escapeHtml(i.notifyWhatsapp||'')}"></div>
+      <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
+    </div>
+    <h3>Billing</h3>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:0;">The consultation fee is treated as valid for this many days — a returning patient billed within that window won't be charged it again (Billing will default the fee to ₹0, and the Patient Visits screen shows how many days are left).</p>
+      <div class="field" style="max-width:280px;"><label>Consultation fee valid for (days)</label><input id="if-consultation-days" type="number" min="1" value="${escapeHtml(i.consultationFeeValidDays||30)}"></div>
       <button class="btn btn-primary" onclick="saveClinicInfo()">Save clinic info</button>
     </div>
     <h3>Website Traffic</h3>
