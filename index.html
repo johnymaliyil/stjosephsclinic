@@ -592,6 +592,9 @@ function isAdminStaff(){ return state.sessionStaffName === 'Admin' || state.sess
 const STAFF_RESTRICTED_VIEWS = ['admin-dashboard', 'admin-reports', 'admin-blog', 'admin-whatsapp', 'admin-feedback'];
 const STAFF_DEFAULT_VIEW = 'admin-patients';
 function deleteBtn(fn, id, label){ return isAdminStaff() ? `<button class="btn btn-danger btn-small" onclick="${fn}('${id}')">${label||'Delete'}</button>` : ''; }
+// Vaccination records are the one exception where Danny and Sheena (not just
+// Admin/Doctor) are allowed to delete -- every other screen still uses deleteBtn.
+function canDeleteVaccination(){ return isAdminStaff() || state.sessionStaffName==='Danny' || state.sessionStaffName==='Sheena'; }
 const HELP_GUIDES = [
   { icon:'🧑‍🤝‍🧑', title:'പുതിയ രോഗിയെ രജിസ്റ്റർ ചെയ്യുക', steps:[
     '"Patients (OPD)" എന്നതിൽ ക്ലിക്ക് ചെയ്ത് "+ New OPD registration" ക്ലിക്ക് ചെയ്യുക.',
@@ -761,7 +764,7 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), sugarValue:'', sugarType:'Fasting', hba1c:'', cholesterol:'', details:'', amount:'' },
   editingLabRecord:null,
-  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0,
+  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0, savingVaccination:false,
   vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
@@ -2832,6 +2835,10 @@ window.deleteVaccination = async function(id){
   lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
 };
 window.saveVaccinationForm = async function(){
+  // Guards against duplicate vaccination records from a double-tap on Save
+  // (easy to do on a slow connection, since nothing visibly changes until the
+  // addDoc below resolves and the form closes).
+  if(state.savingVaccination) return;
   const f = state.vaccinationForm;
   if(!f.selectedPatient){ showToast('Please select a patient. / ഒരു രോഗിയെ തിരഞ്ഞെടുക്കുക.'); return; }
   const date = document.getElementById('vac-date').value;
@@ -2851,12 +2858,15 @@ window.saveVaccinationForm = async function(){
     vaccineKey:f.vaccineKey, vaccineLabel, fromOldChart: !!f.fromOldChart,
     date, notes, enteredBy: state.sessionStaffName || '', createdAtMillis:Date.now(), createdAt:new Date().toISOString()
   };
+  state.savingVaccination = true; render();
   try{
     await addDoc(collection(db,'vaccinations'), data);
   }catch(e){
     console.error(e);
     showToast('Could not save vaccination — check the browser console for details. / വാക്സിനേഷൻ സേവ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
     return;
+  }finally{
+    state.savingVaccination = false;
   }
   resetVaccinationForm();
   lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
@@ -4658,7 +4668,7 @@ function viewAdminVaccinations(){
       <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;font-weight:400;color:var(--text);"><input type="checkbox" style="width:auto;" ${f.fromOldChart?'checked':''} onchange="state.vaccinationForm.fromOldChart=this.checked;"> ഇത് പഴയ പേപ്പർ ചാർട്ടിൽ നിന്ന് എൻ്റർ ചെയ്യുന്നതാണ് (This is from an old paper chart)</label>
     </div>
     <div class="row-actions" style="margin-top:14px;">
-      <button class="btn btn-primary" onclick="saveVaccinationForm()">Save</button>
+      <button class="btn btn-primary" onclick="saveVaccinationForm()" ${state.savingVaccination?'disabled':''}>${state.savingVaccination?'Saving…':'Save'}</button>
       <button class="btn btn-outline" onclick="resetVaccinationForm(); render();">Cancel</button>
     </div>
   </div>`;
@@ -4678,7 +4688,7 @@ function viewAdminVaccinations(){
     <td>${escapeHtml(v.vaccineLabel||v.vaccineKey||'')}</td>
     <td>${escapeHtml(v.notes||'')}</td>
     <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(v.enteredBy||'—')}</td>
-    <td class="row-actions">${deleteBtn('deleteVaccination', v.id)}</td>
+    <td class="row-actions">${canDeleteVaccination() ? `<button class="btn btn-danger btn-small" onclick="deleteVaccination('${v.id}')">Delete</button>` : ''}</td>
   </tr>`).join('');
   return adminShell(`
     <h2 class="display">Vaccinations</h2>
