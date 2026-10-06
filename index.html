@@ -755,7 +755,7 @@ let state = {
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null, visitsMonthFilter:false,
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false, editingBill:null,
   billForm:{ walkIn:false, walkInName:'', walkInPhone:'', visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -1607,7 +1607,7 @@ function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
   state.visitFormErrors = null;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null };
 }
 async function loadLastVitals(patientId){
   try{
@@ -1708,15 +1708,16 @@ window.selectVisitPatient = async function(id){
   if(p){
     state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[];
     state.visitForm.lastVitals=null; state.visitForm.previousVisits=[]; state.visitForm.showPreviousVisits=false;
-    state.visitForm.previousVisitsLoading=true;
+    state.visitForm.previousVisitsLoading=true; state.visitForm.consultationFeeStatus=null;
   }
   render();
   if(p){
-    const [lastVitals, previousVisits] = await Promise.all([loadLastVitals(p.id), loadPreviousVisits(p.id)]);
+    const [lastVitals, previousVisits, lastPaidConsultation] = await Promise.all([loadLastVitals(p.id), loadPreviousVisits(p.id), loadLastPaidConsultation(p.id)]);
     if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===p.id){
       state.visitForm.lastVitals = lastVitals;
       state.visitForm.previousVisits = previousVisits;
       state.visitForm.previousVisitsLoading = false;
+      state.visitForm.consultationFeeStatus = consultationFeeStatus(lastPaidConsultation, state.visitForm.date||todayISO());
       render();
     }
   }
@@ -2192,6 +2193,26 @@ async function loadLastPaidConsultation(patientId){
     return bills[0] || null;
   }catch(e){ console.error('Could not check last paid consultation fee', e); return null; }
 }
+const CONSULTATION_FEE_VALID_DAYS = 30;
+function consultationFeeStatus(lastBill, asOfDateStr){
+  if(!lastBill || !lastBill.date) return { lastPaidDate:null, daysSince:null, feeDue:true };
+  const asOf = new Date((asOfDateStr||todayISO())+'T00:00:00');
+  const lastDate = new Date(lastBill.date+'T00:00:00');
+  const daysSince = Math.round((asOf - lastDate) / 86400000);
+  return { lastPaidDate:lastBill.date, daysSince, feeDue: daysSince<0 || daysSince>=CONSULTATION_FEE_VALID_DAYS };
+}
+function consultationFeeStatusBanner(status){
+  if(!status) return '';
+  if(status.feeDue){
+    const msg = status.lastPaidDate
+      ? `⚠️ Consultation fee due — last paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago, more than ${CONSULTATION_FEE_VALID_DAYS} days).`
+      : `⚠️ Consultation fee due — no previous consultation fee on record.`;
+    return `<p style="background:var(--danger-soft);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;">${escapeHtml(msg)}</p>`;
+  }
+  const daysLeft = CONSULTATION_FEE_VALID_DAYS - status.daysSince;
+  const msg = `✅ Consultation fee already paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago) — covers follow-ups for ${daysLeft} more day${daysLeft===1?'':'s'}.`;
+  return `<p style="background:var(--success-soft);color:var(--success);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;">${escapeHtml(msg)}</p>`;
+}
 window.setBillVisitSearchField = function(field){
   state.billForm.visitSearchField = field;
   state.billForm.visitQuery = '';
@@ -2249,23 +2270,22 @@ async function selectBillVisitObject(v){
     }catch(e){ console.error('Could not check registration fee status', e); }
   }
 
-  // Always ask rather than deciding silently -- staff know whether this visit
-  // needs a fresh consultation better than a date-based rule can.
-  let consultNote = '';
+  // The consultation fee covers CONSULTATION_FEE_VALID_DAYS days, so default it
+  // on/off from that rule instead of asking every time -- the amount field
+  // above stays editable for a staff member who knows better for this visit.
+  let feeStatus = { lastPaidDate:null, daysSince:null, feeDue:true };
   if(v.patientId){
     try{
       const lastBill = await loadLastPaidConsultation(v.patientId);
-      if(lastBill && lastBill.date){
-        const visitDate = new Date((v.date||todayISO())+'T00:00:00');
-        const lastDate = new Date(lastBill.date+'T00:00:00');
-        const daysSince = Math.round((visitDate - lastDate) / 86400000);
-        if(daysSince >= 0) consultNote = `\n\nLast paid on ${lastBill.date} (${daysSince} day${daysSince===1?'':'s'} ago).`;
-      }
+      feeStatus = consultationFeeStatus(lastBill, v.date||todayISO());
     }catch(e){ console.error('Could not check last paid consultation fee', e); }
   }
-  const addConsultFee = confirm(`Add the ₹200 consultation fee for this bill? / ₹200 കൺസൾട്ടേഷൻ ഫീസ് ഈ ബില്ലിൽ ചേർക്കണോ?${consultNote}`);
-  state.billForm.consultationFee = addConsultFee ? 200 : 0;
-  state.billForm.consultationFeeNote = addConsultFee ? null : 'No consultation fee added for this bill.';
+  state.billForm.consultationFee = feeStatus.feeDue ? 200 : 0;
+  state.billForm.consultationFeeNote = feeStatus.lastPaidDate
+    ? (feeStatus.feeDue
+        ? `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — more than ${CONSULTATION_FEE_VALID_DAYS} days, so the fee is added. Remove it above if not needed.`
+        : `Last paid on ${feeStatus.lastPaidDate} (${feeStatus.daysSince} day${feeStatus.daysSince===1?'':'s'} ago) — within the ${CONSULTATION_FEE_VALID_DAYS}-day free follow-up window, so no fee was added. Add one above if this visit needs a fresh consultation.`)
+    : `No previous consultation fee on record, so the fee is added. Remove it above if not needed.`;
 }
 window.clearBillVisit = function(){ state.billForm.selectedVisit = null; state.billForm.medItems = []; render(); };
 window.setBillWalkIn = function(walkIn){
@@ -4476,6 +4496,7 @@ function viewAdminVisits(){
   const formCard = !showForm ? `<div class="row-actions" style="margin-bottom:20px;"><button class="btn btn-primary" onclick="state.showVisitForm=true; state.visitFormErrors=null; render();">+ Register visit</button></div>` : `<div class="card" style="margin-bottom:20px;">
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
+    ${f.selectedPatient ? consultationFeeStatusBanner(f.consultationFeeStatus) : ''}
     ${f.selectedPatient ? `<div class="field">
       <button class="btn btn-outline btn-small" onclick="toggleShowPreviousVisits()">${f.previousVisitsLoading?'Loading previous visits…':`${f.showPreviousVisits?'Hide':'Show'} previous visits (${f.previousVisits.length})`}</button>
       ${f.showPreviousVisits ? previousVisitsHtml(f.previousVisits) : ''}
