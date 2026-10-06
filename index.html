@@ -254,6 +254,19 @@ function timeIST(millis){
     return new Date(millis).toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:true });
   }catch(e){ return ''; }
 }
+// Age in years is stored unchanged (so every existing years-only calculation --
+// pediatric weight/height hints, growth chart, etc. -- keeps working as before);
+// months is purely additional display precision for infants/toddlers, where
+// "6 months" is far more meaningful to a parent than "0 years".
+function formatPatientAge(p){
+  const years = Number(p.age)||0;
+  const months = Number(p.ageMonths)||0;
+  if(!p.age && !p.ageMonths) return '';
+  const parts = [];
+  if(years) parts.push(`${years}y`);
+  if(months) parts.push(`${months}m`);
+  return parts.length ? parts.join(' ') : '0y';
+}
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr+'T00:00:00');
@@ -1439,6 +1452,7 @@ window.savePatientForm = async function(){
   const email=document.getElementById('pf-email').value.trim();
   const gender=document.getElementById('pf-gender').value;
   const age=document.getElementById('pf-age').value;
+  const ageMonths=document.getElementById('pf-age-months').value;
   const dob=document.getElementById('pf-dob').value;
   const address=document.getElementById('pf-address').value.trim();
   if(!name || !opdNo){
@@ -1457,7 +1471,11 @@ window.savePatientForm = async function(){
   }
   state.patientFormErrors = null;
   const data = { opdNo, opdNoNum: parseInt(opdNo)||null, name, nameLower:name.toLowerCase(),
-    phone, email, gender, age, dob, address, addressLower:address.toLowerCase(), registeredAtMillis:Date.now(), registeredAt:new Date().toISOString() };
+    phone, email, gender, age, ageMonths, dob, address, addressLower:address.toLowerCase() };
+  // Only stamp the registration time for a brand-new patient -- editing an
+  // existing patient's details (e.g. fixing a typo) shouldn't reset when they
+  // were actually first registered.
+  if(!state.editingPatient){ data.registeredAtMillis = Date.now(); data.registeredAt = new Date().toISOString(); }
   const wasEditing = !!state.editingPatient;
   if(state.editingPatient){ await updateDoc(doc(db,'patients',state.editingPatient.id), data); state.editingPatient=null; }
   else{ await addDoc(collection(db,'patients'), {...data, registrationFeeCharged:false}); }
@@ -1967,7 +1985,7 @@ window.printPatientHistory = async function(patientId){
   <div style="margin-bottom:18px;">
     <div class="muted">PATIENT</div>
     <strong style="font-size:16px;">${escapeHtml(patient.name)}</strong> &middot; OPD ${escapeHtml(patient.opdNo||'')}<br>
-    ${[patient.age?`Age ${escapeHtml(String(patient.age))}`:'', patient.dob?`DOB ${escapeHtml(patient.dob)}`:'', patient.gender||'', patient.phone||''].filter(Boolean).join(' &middot; ')}
+    ${[formatPatientAge(patient)?`Age ${escapeHtml(formatPatientAge(patient))}`:'', patient.dob?`DOB ${escapeHtml(patient.dob)}`:'', patient.gender||'', patient.phone||''].filter(Boolean).join(' &middot; ')}
   </div>
   <h2 style="border-bottom:1px solid #1F4A42;padding-bottom:6px;">Visit history (${visits.length})</h2>
   ${visitRows || '<p class="muted">No visits recorded yet.</p>'}
@@ -1984,7 +2002,7 @@ window.notifyDoctorPatientHistory = async function(patientId){
   const MAX_VISITS = 8;
   const recent = visits.slice(-MAX_VISITS).reverse();
   const lines = [`Patient history — ${patient.name} (OPD ${patient.opdNo||'—'})`];
-  const details = [patient.age?`Age ${patient.age}`:'', patient.dob?`DOB ${patient.dob}`:'', patient.gender||''].filter(Boolean).join(' · ');
+  const details = [formatPatientAge(patient)?`Age ${formatPatientAge(patient)}`:'', patient.dob?`DOB ${patient.dob}`:'', patient.gender||''].filter(Boolean).join(' · ');
   if(details) lines.push(details);
   lines.push(`${visits.length} visit${visits.length===1?'':'s'} on record`, '');
   recent.forEach(v=>{
@@ -4317,7 +4335,10 @@ function viewAdminPatients(){
       <div class="field"><label>Phone</label><input id="pf-phone" type="text" value="${escapeHtml(p?p.phone:'')}"></div>
       <div class="field"><label>Email (optional)</label><input id="pf-email" type="email" value="${escapeHtml(p?p.email:'')}"></div>
       <div class="field"><label>Gender</label><select id="pf-gender">${['Male','Female','Other'].map(g=>`<option ${p&&p.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
-      <div class="field"><label>Age</label><input id="pf-age" type="number" min="0" value="${p?p.age:''}"></div>
+      <div class="field"><label>Age (years)</label><input id="pf-age" type="number" min="0" value="${p?p.age:''}"></div>
+      <div class="field"><label>Age (months)</label><input id="pf-age-months" type="number" min="0" max="11" value="${p&&p.ageMonths?p.ageMonths:''}">
+        <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">For infants/toddlers, e.g. 6 months.</p>
+      </div>
       <div class="field"><label>Date of birth (optional)</label><input id="pf-dob" type="date" value="${p&&p.dob?p.dob:''}">
         <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Needed for vaccination due reminders.</p>
       </div>
@@ -4329,7 +4350,7 @@ function viewAdminPatients(){
     </div></div>`;
   const rows=state.data.patients.map(pt=>`<tr>
     <td class="mono">${escapeHtml(pt.opdNo)}</td><td>${escapeHtml(pt.name)}</td><td>${escapeHtml(pt.address)}</td>
-    <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.email)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(pt.age)}</td>
+    <td>${escapeHtml(pt.phone)}</td><td>${escapeHtml(pt.email)}</td><td>${escapeHtml(pt.gender)}</td><td>${escapeHtml(formatPatientAge(pt))}</td>
     <td class="mono" style="font-size:12px;">${escapeHtml((pt.registeredAt||'').slice(0,10))}${pt.registeredAtMillis?`<br><span style="color:var(--text-muted);">${timeIST(pt.registeredAtMillis)}</span>`:''}</td>
     <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${pt.id}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${pt.id}')">Bills</button><button class="btn btn-outline btn-small" onclick="viewPatientGrowthChart('${pt.id}','${(pt.name||'').replace(/'/g,"\\'")}')">Growth Chart</button><button class="btn btn-outline btn-small" onclick="editPatient('${pt.id}')">Edit</button>${deleteBtn('deletePatient', pt.id)}</td>
   </tr>`).join('');
@@ -4828,7 +4849,7 @@ function reportTabPatients(){
       <td>${escapeHtml(p.name||'')}</td>
       <td class="mono">${escapeHtml(p.phone||'')}</td>
       <td>${escapeHtml(p.gender||'')}</td>
-      <td class="mono">${escapeHtml(p.age||'')}</td>
+      <td class="mono">${escapeHtml(formatPatientAge(p))}</td>
       <td class="mono">${escapeHtml((p.registeredAt||'').slice(0,10))}</td>
       <td class="mono">${timeIST(p.registeredAtMillis)}</td>
       <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${p.id}','${safeName}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${p.id}','${safeName}')">Bills</button></td>
