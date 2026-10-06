@@ -4224,9 +4224,9 @@ async function buildSummaryText(label, fromDate, toDate){
   if(singleDay && visitsList.length){
     const MAX_VISITS = 20;
     lines.push('', 'Visit details:');
-    visitsList.slice(0,MAX_VISITS).forEach(v=>{
+    visitsList.slice(0,MAX_VISITS).forEach((v,idx)=>{
       const age = patientAges[v.patientId];
-      lines.push(`- ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}${age?`, Age ${age}`:''}) — ${v.reason||'No reason recorded'}`);
+      lines.push(`${idx+1}. ${v.patientName||'—'} (OPD ${v.patientOpdNo||'—'}${age?`, Age ${age}`:''}) — ${v.reason||'No reason recorded'}`);
       if(v.medicines && v.medicines.length){
         lines.push(`  Meds: ${v.medicines.map(m=>`${m.name}${m.quantity?` x${m.quantity}`:''}`).join(', ')}`);
       }else{
