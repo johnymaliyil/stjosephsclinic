@@ -756,7 +756,7 @@ let state = {
   growthChartPatient:null, growthChartData:[], growthChartLoading:false,
   showPatientForm:false, showVisitForm:false, showMedForm:false,
   visitsLoading:false, hasMoreVisits:false, visitsSearchTerm:'', visitsPatientFilter:null, visitsMonthFilter:false,
-  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null },
+  visitForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null, vaccinationCount:null },
   editingVisit:null,
   billsLoading:false, hasMoreBills:false, billsSearchTerm:'', billsPatientFilter:null, showBillForm:false, editingBill:null,
   billForm:{ walkIn:false, walkInName:'', walkInPhone:'', visitQuery:'', visitResults:[], visitSearchField:'name', selectedVisit:null, consultationFee:200, medItems:[], extraItems:[{description:'',amount:''}], paymentMethod:'cash' },
@@ -765,7 +765,7 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), sugarValue:'', sugarType:'Fasting', hba1c:'', cholesterol:'', details:'', amount:'' },
   editingLabRecord:null,
-  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0, savingVaccination:false, vaccinationsTotalCount:null,
+  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0, savingVaccination:false, vaccinationsTotalCount:null, vaccinationsPatientFilter:null,
   vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
@@ -1609,7 +1609,7 @@ function resetVisitForm(){
   state.editingVisit = null;
   state.showVisitForm = false;
   state.visitFormErrors = null;
-  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null };
+  state.visitForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), reason:'', doctorName:'Dr. Joseph Varkey', meds:[{source:'pharmacy',medicineId:'',name:'',quantity:'',dosage:''}], weight:'', height:'', temperature:'', bp:'', sugarValue:'', sugarType:'Random', lastVitals:null, previousVisits:[], previousVisitsLoading:false, showPreviousVisits:false, consultationFeeStatus:null, vaccinationCount:null };
 }
 async function loadLastVitals(patientId){
   try{
@@ -1710,16 +1710,17 @@ window.selectVisitPatient = async function(id){
   if(p){
     state.visitForm.selectedPatient = p; state.visitForm.patientQuery=''; state.visitForm.patientResults=[];
     state.visitForm.lastVitals=null; state.visitForm.previousVisits=[]; state.visitForm.showPreviousVisits=false;
-    state.visitForm.previousVisitsLoading=true; state.visitForm.consultationFeeStatus=null;
+    state.visitForm.previousVisitsLoading=true; state.visitForm.consultationFeeStatus=null; state.visitForm.vaccinationCount=null;
   }
   render();
   if(p){
-    const [lastVitals, previousVisits, lastPaidConsultation] = await Promise.all([loadLastVitals(p.id), loadPreviousVisits(p.id), loadLastPaidConsultation(p.id)]);
+    const [lastVitals, previousVisits, lastPaidConsultation, vaccinationCount] = await Promise.all([loadLastVitals(p.id), loadPreviousVisits(p.id), loadLastPaidConsultation(p.id), loadPatientVaccinationCount(p.id)]);
     if(state.visitForm.selectedPatient && state.visitForm.selectedPatient.id===p.id){
       state.visitForm.lastVitals = lastVitals;
       state.visitForm.previousVisits = previousVisits;
       state.visitForm.previousVisitsLoading = false;
       state.visitForm.consultationFeeStatus = consultationFeeStatus(lastPaidConsultation, state.visitForm.date||todayISO());
+      state.visitForm.vaccinationCount = vaccinationCount;
       render();
     }
   }
@@ -2214,6 +2215,14 @@ function consultationFeeStatusBanner(status){
   const daysLeft = consultationFeeValidDays() - status.daysSince;
   const msg = `✅ Consultation fee already paid on ${status.lastPaidDate} (${status.daysSince} day${status.daysSince===1?'':'s'} ago) — covers follow-ups for ${daysLeft} more day${daysLeft===1?'':'s'}.`;
   return `<p style="background:var(--success-soft);color:var(--success);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;">${escapeHtml(msg)}</p>`;
+}
+function vaccinationRecordBanner(patientId, patientName, count){
+  const safeName = (patientName||'').replace(/'/g,"\\'");
+  const msg = `💉 This patient has ${count} vaccination record${count===1?'':'s'} on file.`;
+  return `<p style="background:var(--accent-soft);color:#5A3D0E;padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <span>${escapeHtml(msg)}</span>
+    <button type="button" class="btn btn-outline btn-small" onclick="viewPatientVaccinations('${patientId}','${safeName}')">View vaccinations</button>
+  </p>`;
 }
 window.setBillVisitSearchField = function(field){
   state.billForm.visitSearchField = field;
@@ -2808,6 +2817,37 @@ async function loadVaccinationsPage(reset){
 window.setVaccinationsSearchTerm = function(v){ state.vaccinationsSearchTerm=v; };
 window.triggerVaccinationsSearch = function(){ lastVisibleVaccinationDoc=null; loadVaccinationsPage(true); };
 window.loadMoreVaccinations = function(){ loadVaccinationsPage(false); };
+window.viewPatientVaccinations = async function(patientId, patientName){
+  const patient = state.data.patients.find(p=>p.id===patientId);
+  pushViewHistory();
+  state.view='admin-vaccinations'; state.loginError=''; state.editingPatient=null; state.editingMed=null;
+  state.showPatientForm=false; state.showVisitForm=false; state.showMedForm=false;
+  resetBillForm();
+  resetVaccinationForm();
+  state.vaccinationsSearchTerm = '';
+  state.vaccinationsPatientFilter = { id:patientId, name: patientName || (patient?patient.name:'') };
+  try{ localStorage.setItem('lastAdminView','admin-vaccinations'); }catch(e){}
+  lastVisibleVaccinationDoc = null;
+  state.vaccinationsLoading = true; render(); window.scrollTo(0,0);
+  try{
+    // Equality-only filter, sorted client-side -- same composite-index-avoidance
+    // pattern as loadLastVitals/loadPreviousVisits.
+    const q = query(collection(db,'vaccinations'), where('patientId','==',patientId));
+    const snap = await getDocs(q);
+    state.data.vaccinations = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAtMillis||0)-(a.createdAtMillis||0));
+    state.hasMoreVaccinations = false;
+  }catch(e){
+    console.error(e);
+    showToast('Could not load vaccinations for this patient. / ഈ രോഗിയുടെ വാക്സിനേഷനുകൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല.');
+    state.data.vaccinations = [];
+  }
+  state.vaccinationsLoading = false; render();
+};
+window.clearVaccinationsPatientFilter = function(){
+  state.vaccinationsPatientFilter = null;
+  lastVisibleVaccinationDoc = null;
+  loadVaccinationsPage(true);
+};
 function resetVaccinationForm(){
   state.showVaccinationForm = false;
   state.vaccinationForm = { patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false };
@@ -2899,6 +2939,12 @@ async function loadVaccinationsTotalCount(){
     const snap = await getCountFromServer(collection(db,'vaccinations'));
     state.vaccinationsTotalCount = snap.data().count;
   }catch(e){ console.error('Could not load total vaccination count', e); state.vaccinationsTotalCount = null; }
+}
+async function loadPatientVaccinationCount(patientId){
+  try{
+    const snap = await getCountFromServer(query(collection(db,'vaccinations'), where('patientId','==',patientId)));
+    return snap.data().count;
+  }catch(e){ console.error('Could not check vaccination records for patient', e); return 0; }
 }
 async function loadOldChartProgress(){
   try{
@@ -3609,7 +3655,7 @@ window.setView = async function(v){
       }
     }
     if(v==='admin-vaccinations'){
-      resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
+      resetVaccinationForm(); state.vaccinationsSearchTerm=''; state.vaccinationsPatientFilter=null; lastVisibleVaccinationDoc=null;
       await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress(), loadVaccinationsTotalCount()]);
     }
     if(v==='admin-billing'){
@@ -4505,6 +4551,7 @@ function viewAdminVisits(){
     <h3 style="margin-top:0;">${state.editingVisit?'Edit visit':'Register a patient visit'}</h3>
     <div class="field"><label>Patient</label>${patientBlock}</div>
     ${f.selectedPatient ? consultationFeeStatusBanner(f.consultationFeeStatus) : ''}
+    ${(f.selectedPatient && f.vaccinationCount) ? vaccinationRecordBanner(f.selectedPatient.id, f.selectedPatient.name, f.vaccinationCount) : ''}
     ${f.selectedPatient ? `<div class="field">
       <button class="btn btn-outline btn-small" onclick="toggleShowPreviousVisits()">${f.previousVisitsLoading?'Loading previous visits…':`${f.showPreviousVisits?'Hide':'Show'} previous visits (${f.previousVisits.length})`}</button>
       ${f.showPreviousVisits ? previousVisitsHtml(f.previousVisits) : ''}
@@ -4737,9 +4784,12 @@ function viewAdminVaccinations(){
     </div>
     ${dueCard}
     ${formCard}
-    <div class="search-row" style="margin-bottom:16px;">
+    ${state.vaccinationsPatientFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>Showing all vaccinations for <strong>${escapeHtml(state.vaccinationsPatientFilter.name)}</strong></div>
+      <button class="btn btn-outline btn-small" onclick="clearVaccinationsPatientFilter()">Show all vaccinations</button>
+    </div>` : `<div class="search-row" style="margin-bottom:16px;">
       <input type="text" placeholder="Search by patient name…" value="${escapeHtml(state.vaccinationsSearchTerm)}" oninput="setVaccinationsSearchTerm(this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" onblur="triggerVaccinationsSearch()">
-    </div>
+    </div>`}
     <div class="table-wrap">
       ${state.vaccinationsLoading? loadingSkeleton(5) :
         rows? `<table><thead><tr><th>Date</th><th>Patient</th><th>Vaccine</th><th>Notes</th><th>Staff</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
