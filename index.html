@@ -765,7 +765,7 @@ let state = {
   labRecordsLoading:false, hasMoreLabRecords:false, labRecordsSearchTerm:'', showLabRecordForm:false,
   labRecordForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, date:todayISO(), sugarValue:'', sugarType:'Fasting', hba1c:'', cholesterol:'', details:'', amount:'' },
   editingLabRecord:null,
-  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0, savingVaccination:false,
+  vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], oldChartEntriesToday:0, savingVaccination:false, vaccinationsTotalCount:null,
   vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'', fromOldChart:false },
   reportTab:'collections',
   reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
@@ -2854,7 +2854,7 @@ window.recordDueVaccination = function(patientId, vaccineKey){
 window.deleteVaccination = async function(id){
   if(!confirm('Delete this vaccination record? This cannot be undone.\nഈ വാക്സിനേഷൻ രേഖ ഡിലീറ്റ് ചെയ്യണോ? ഇത് തിരികെയെടുക്കാൻ കഴിയില്ല.')) return;
   try{ await deleteDoc(doc(db,'vaccinations',id)); }catch(e){ console.error(e); showToast('Could not delete vaccination record. / വാക്സിനേഷൻ രേഖ ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല.'); return; }
-  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadVaccinationsTotalCount()]);
 };
 window.saveVaccinationForm = async function(){
   // Guards against duplicate vaccination records from a double-tap on Save
@@ -2891,9 +2891,15 @@ window.saveVaccinationForm = async function(){
     state.savingVaccination = false;
   }
   resetVaccinationForm();
-  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
+  lastVisibleVaccinationDoc=null; await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress(), loadVaccinationsTotalCount()]);
   showToast('👍 Vaccination recorded! / വാക്സിനേഷൻ രേഖപ്പെടുത്തി!', 'success'); render();
 };
+async function loadVaccinationsTotalCount(){
+  try{
+    const snap = await getCountFromServer(collection(db,'vaccinations'));
+    state.vaccinationsTotalCount = snap.data().count;
+  }catch(e){ console.error('Could not load total vaccination count', e); state.vaccinationsTotalCount = null; }
+}
 async function loadOldChartProgress(){
   try{
     // Equality-only filter, sorted/filtered client-side -- same composite-index-avoidance
@@ -3604,7 +3610,7 @@ window.setView = async function(v){
     }
     if(v==='admin-vaccinations'){
       resetVaccinationForm(); state.vaccinationsSearchTerm=''; lastVisibleVaccinationDoc=null;
-      await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress()]);
+      await Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadOldChartProgress(), loadVaccinationsTotalCount()]);
     }
     if(v==='admin-billing'){
       state.billsSearchTerm=''; lastVisibleBillDoc=null;
@@ -3642,7 +3648,7 @@ function refreshCurrentView(){
   if(v==='admin-patients') return Promise.all([loadPatientsPage(true), computeNextOpdNo()]);
   if(v==='admin-visits') return Promise.all([loadVisitsPage(true), loadMedicines()]);
   if(v==='admin-labtests') return loadLabRecordsPage(true);
-  if(v==='admin-vaccinations') return Promise.all([loadVaccinationsPage(true), loadVaccinationsDue()]);
+  if(v==='admin-vaccinations') return Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadVaccinationsTotalCount()]);
   if(v==='admin-billing') return Promise.all([loadBillsPage(true), loadMedicines()]);
   if(v==='admin-reports') return reloadCurrentReportTab();
   if(v==='admin-inventory') return Promise.all([loadMedicines(), loadReorderAlerts()]);
@@ -4716,6 +4722,9 @@ function viewAdminVaccinations(){
   return adminShell(`
     <h2 class="display">Vaccinations</h2>
     <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Reference schedule based on India's Universal Immunization Programme — confirm timing with the doctor. Due reminders need the patient's date of birth to be set (Patients (OPD) → Edit).</p>
+    <div class="stat-row">
+      <div class="stat-card"><div class="num">${state.vaccinationsTotalCount===null?'…':state.vaccinationsTotalCount}</div><div class="label">Total vaccinations recorded</div></div>
+    </div>
     <div class="card" style="margin-bottom:20px;">
       <h3 style="margin-top:0;">🗂️ പഴയ ചാർട്ട് എൻട്രി പുരോഗതി (Old chart entry progress — today)</h3>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
