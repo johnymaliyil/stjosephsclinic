@@ -4898,15 +4898,17 @@ function reportTabCollections(){
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
     const bills = filteredReportBills();
-    const rows = bills.map(b=>`<tr>
+    const rows = bills.map(b=>{
+      const safeName = (b.patientName||'').replace(/'/g,"\\'");
+      return `<tr>
       <td class="mono">${escapeHtml(b.billNumber||'')}</td>
       <td class="mono">${escapeHtml(b.date||'')}</td>
       <td class="mono">${timeIST(b.createdAtMillis)}</td>
       <td>${escapeHtml(b.patientName||'')}</td>
       <td>${b.paymentMethod==='upi'?'UPI':'Cash'}</td>
       <td class="mono">₹${(Number(b.grandTotal)||0).toFixed(2)}</td>
-      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button></td>
-    </tr>`).join('');
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button>${b.patientId?`<button class="btn btn-outline btn-small" onclick="viewPatientVisits('${b.patientId}','${safeName}')">Visits</button>`:''}</td>
+    </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
       ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
