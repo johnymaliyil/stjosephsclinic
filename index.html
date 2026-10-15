@@ -768,7 +768,7 @@ let state = {
   vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], savingVaccination:false, vaccinationsTotalCount:null, vaccinationsPatientFilter:null,
   vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' },
   reportTab:'collections',
-  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null,
+  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null, reportPatientsWithVaccinations:null,
   patientsReportLoading:false, reportPatients:[],
   visitsReportLoading:false, reportVisitsList:[],
   labReportLoading:false, reportLabRecords:[],
@@ -2946,6 +2946,16 @@ async function loadPatientVaccinationCount(patientId){
     return snap.data().count;
   }catch(e){ console.error('Could not check vaccination records for patient', e); return 0; }
 }
+async function loadPatientsWithVaccinations(){
+  try{
+    // One pass over the whole collection (same approach as loadVaccinationsDue)
+    // rather than a per-row query, since report tables can list many patients at once.
+    const snap = await getDocs(collection(db,'vaccinations'));
+    const set = new Set();
+    snap.docs.forEach(d=>{ const pid = d.data().patientId; if(pid) set.add(pid); });
+    state.reportPatientsWithVaccinations = set;
+  }catch(e){ console.error('Could not load vaccination records for reports', e); state.reportPatientsWithVaccinations = new Set(); }
+}
 async function loadVaccinationsDue(){
   try{
     const [patientsSnap, vaccSnap] = await Promise.all([
@@ -3654,7 +3664,7 @@ window.setView = async function(v){
       await Promise.all([loadBillsPage(true), loadMedicines()]);
       if(state.billingPrefillVisit){ await selectBillVisitObject(state.billingPrefillVisit); state.billingPrefillVisit=null; state.showBillForm=true; }
     }
-    if(v==='admin-reports') await reloadCurrentReportTab();
+    if(v==='admin-reports') await Promise.all([reloadCurrentReportTab(), loadPatientsWithVaccinations()]);
     if(v==='admin-inventory'){ await loadMedicines(); await loadReorderAlerts(); }
     if(v==='admin-purchases'){ resetPurchaseForm(); lastVisiblePurchaseDoc=null; await Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]); }
     if(v==='admin-appointments') await loadAppointments();
@@ -3687,7 +3697,7 @@ function refreshCurrentView(){
   if(v==='admin-labtests') return loadLabRecordsPage(true);
   if(v==='admin-vaccinations') return Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadVaccinationsTotalCount()]);
   if(v==='admin-billing') return Promise.all([loadBillsPage(true), loadMedicines()]);
-  if(v==='admin-reports') return reloadCurrentReportTab();
+  if(v==='admin-reports') return Promise.all([reloadCurrentReportTab(), loadPatientsWithVaccinations()]);
   if(v==='admin-inventory') return Promise.all([loadMedicines(), loadReorderAlerts()]);
   if(v==='admin-purchases') return Promise.all([loadPurchasesPage(true), loadMedicines(), loadUnpaidPurchases()]);
   if(v==='admin-appointments') return loadAppointments();
@@ -4907,7 +4917,7 @@ function reportTabCollections(){
       <td>${escapeHtml(b.patientName||'')}</td>
       <td>${b.paymentMethod==='upi'?'UPI':'Cash'}</td>
       <td class="mono">₹${(Number(b.grandTotal)||0).toFixed(2)}</td>
-      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button>${b.patientId?`<button class="btn btn-outline btn-small" onclick="viewPatientVisits('${b.patientId}','${safeName}')">Visits</button>`:''}</td>
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="printBillById('${b.id}')">View</button>${b.patientId?`<button class="btn btn-outline btn-small" onclick="viewPatientVisits('${b.patientId}','${safeName}')">Visits</button>`:''}${(b.patientId && state.reportPatientsWithVaccinations && state.reportPatientsWithVaccinations.has(b.patientId))?`<button class="btn btn-outline btn-small" onclick="viewPatientVaccinations('${b.patientId}','${safeName}')">Vaccinations</button>`:''}</td>
     </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
@@ -4948,7 +4958,7 @@ function reportTabPatients(){
       <td class="mono">${escapeHtml(formatPatientAge(p))}</td>
       <td class="mono">${escapeHtml((p.registeredAt||'').slice(0,10))}</td>
       <td class="mono">${timeIST(p.registeredAtMillis)}</td>
-      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${p.id}','${safeName}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${p.id}','${safeName}')">Bills</button></td>
+      <td class="row-actions"><button class="btn btn-outline btn-small" onclick="viewPatientVisits('${p.id}','${safeName}')">Visits</button><button class="btn btn-outline btn-small" onclick="viewPatientBills('${p.id}','${safeName}')">Bills</button>${(state.reportPatientsWithVaccinations && state.reportPatientsWithVaccinations.has(p.id))?`<button class="btn btn-outline btn-small" onclick="viewPatientVaccinations('${p.id}','${safeName}')">Vaccinations</button>`:''}</td>
     </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
