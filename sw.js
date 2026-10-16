@@ -15,17 +15,19 @@ self.addEventListener('activate', (event) => {
 
 // Network-first: always prefer the live site so a deploy is never masked by a
 // stale cache; the cached shell is only used as an offline fallback.
-// cache:'reload' forces an actual round trip to the server instead of letting
-// the browser's own HTTP cache silently satisfy the request with a stale
-// response -- without it, a deploy could still be masked on a device whose
-// browser cache hadn't expired yet, even though this handler calls fetch().
+// cache:'no-cache' always revalidates with the server (so a deploy is never
+// masked by a browser cache that still looks "fresh" by max-age) but lets the
+// server answer with a cheap 304 when nothing changed, instead of forcing a
+// full re-download of this ~400KB single-page file on every load like
+// cache:'reload' did -- that turned out to make loads on slower connections
+// (e.g. an iPad on clinic wifi) noticeably slower.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(event.request, { cache: 'reload' })
+    fetch(event.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
