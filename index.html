@@ -1839,7 +1839,8 @@ window.saveVisitForm = async function(){
   resetVisitForm();
   lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]);
   showToast('👍 Visit saved! / സന്ദർശനം സേവ് ചെയ്തു!', 'success'); render();
-  sendClinicEmail(`New patient visit — ${data.patientName}`, visitEmailText(data));
+  // Temporarily disabled per request -- uncomment to resume emailing on new visits.
+  // sendClinicEmail(`New patient visit — ${data.patientName}`, visitEmailText(data));
 };
 window.notifyDoctorVisit = function(visitId){
   const v = state.data.visits.find(x=>x.id===visitId);
@@ -2411,7 +2412,8 @@ window.saveBillForm = async function(){
   resetBillForm();
   lastVisibleBillDoc=null; await Promise.all([loadBillsPage(true), loadVisitsPage(true), loadMedicines()]);
   showToast(editing?'👍 Bill updated! / ബിൽ അപ്ഡേറ്റ് ചെയ്തു!':'👍 Bill saved! / ബിൽ സേവ് ചെയ്തു!', 'success'); render();
-  if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
+  // Temporarily disabled per request -- uncomment to resume emailing on new bills.
+  // if(!editing) sendClinicEmail(`New bill #${data.billNumber} — ${data.patientName}`, billEmailText(data));
   printBill({id:ref.id, ...data});
 };
 window.deleteBill = async function(id){
