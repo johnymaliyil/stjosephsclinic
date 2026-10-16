@@ -4602,7 +4602,9 @@ function viewAdminVisits(){
       <button class="btn btn-outline" onclick="resetVisitForm(); render();">Cancel</button>
     </div>
   </div>`;
-  const rows = state.data.visits.map(v=>`<tr>
+  const rows = state.data.visits.map(v=>{
+    const safeName = (v.patientName||'').replace(/'/g,"\\'");
+    return `<tr>
     <td class="mono">${escapeHtml(v.date)}${v.createdAtMillis?`<br><span style="color:var(--text-muted);font-size:11px;">${timeIST(v.createdAtMillis)}</span>`:''}</td>
     <td>${escapeHtml(v.patientName)} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(v.patientOpdNo||'')}</span></td>
     <td>${escapeHtml(v.reason||'')}</td>
@@ -4614,10 +4616,10 @@ function viewAdminVisits(){
       ${v.billId?`<button class="btn btn-outline btn-small" onclick="printBillById('${v.billId}')">View bill</button>`:`<button class="btn btn-accent btn-small" onclick="billVisit('${v.id}')">Bill</button>`}
       <button class="btn btn-outline btn-small" onclick="billVisitLabTest('${v.id}')">Lab Test</button>
       <button class="btn btn-outline btn-small" onclick="notifyDoctorVisit('${v.id}')">Notify Dr</button>
-      <button class="btn btn-outline btn-small" onclick="printPatientHistory('${v.patientId}')">History</button>
+      <button class="btn btn-outline btn-small" onclick="viewPatientVisits('${v.patientId}','${safeName}')">History</button>
       <button class="btn btn-outline btn-small" onclick="editVisit('${v.id}')">Edit</button>${deleteBtn('deleteVisit', v.id)}
     </td>
-  </tr>`).join('');
+  </tr>`;}).join('');
   return adminShell(`
     <h2 class="display">Patient Visits</h2>
     ${formCard}
