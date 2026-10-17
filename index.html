@@ -254,6 +254,16 @@ function timeIST(millis){
     return new Date(millis).toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:true });
   }catch(e){ return ''; }
 }
+function istHour(millis){
+  if(!millis) return null;
+  try{
+    // hourCycle:'h23' guarantees a plain 0-23 value across browsers (including
+    // Safari/iPad) -- hour12:false alone can still render "24" for midnight on some engines.
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Kolkata', hour:'2-digit', hourCycle:'h23' }).formatToParts(new Date(millis));
+    const hourPart = parts.find(p=>p.type==='hour');
+    return hourPart ? Number(hourPart.value) : null;
+  }catch(e){ return null; }
+}
 // Age in years is stored unchanged (so every existing years-only calculation --
 // pediatric weight/height hints, growth chart, etc. -- keeps working as before);
 // months is purely additional display precision for infants/toddlers, where
@@ -4296,6 +4306,22 @@ async function buildSummaryText(label, fromDate, toDate){
     if(topReasons.length){
       lines.push('', 'Top visit reasons:');
       topReasons.forEach(r=>lines.push(`- ${r.label}: ${r.count}`));
+    }
+    const MORNING_CUTOFF_HOUR = 14; // 2 PM IST
+    let morningCount = 0, eveningCount = 0;
+    visitsList.forEach(v=>{
+      const h = istHour(v.createdAtMillis);
+      if(h===null) return;
+      if(h < MORNING_CUTOFF_HOUR) morningCount++; else eveningCount++;
+    });
+    const timedTotal = morningCount + eveningCount;
+    if(timedTotal){
+      const morningPct = Math.round(morningCount/timedTotal*100);
+      const eveningPct = 100 - morningPct;
+      const summaryTail = morningCount===eveningCount
+        ? 'evenly split between morning and evening.'
+        : `majority in the ${morningCount>eveningCount?'morning (before 2 PM)':'evening (after 2 PM)'}.`;
+      lines.push('', `Visit timing: ${morningCount} before 2 PM (${morningPct}%), ${eveningCount} after 2 PM (${eveningPct}%) — ${summaryTail}`);
     }
   }
   return lines.join('\n');
