@@ -104,6 +104,8 @@
   .report-amount:hover{color:var(--primary);border-bottom-color:var(--primary);}
   .report-row-clickable{cursor:pointer;}
   .report-row-clickable:hover{background:var(--surface-soft);}
+  .sortable-th{cursor:pointer;user-select:none;}
+  .sortable-th:hover{color:var(--primary);}
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
   .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
   .row-actions{display:flex;gap:6px;flex-wrap:wrap;}
@@ -778,7 +780,7 @@ let state = {
   vaccinationsLoading:false, hasMoreVaccinations:false, vaccinationsSearchTerm:'', showVaccinationForm:false, vaccinationsDue:[], savingVaccination:false, vaccinationsTotalCount:null, vaccinationsPatientFilter:null,
   vaccinationForm:{ patientQuery:'', patientResults:[], patientSearchField:'name', selectedPatient:null, vaccineKey:VACCINE_SCHEDULE[0].key, customVaccineName:'', date:todayISO(), notes:'' },
   reportTab:'collections',
-  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null, reportPatientsWithVaccinations:null,
+  reportLoading:false, reportFrom:monthStartISO(), reportTo:todayISO(), reportBills:[], reportDetailFilter:null, reportPatientsWithVaccinations:null, reportSort:{},
   patientsReportLoading:false, reportPatients:[],
   visitsReportLoading:false, reportVisitsList:[],
   labReportLoading:false, reportLabRecords:[],
@@ -4926,10 +4928,41 @@ function viewAdminBilling(){
 function reportDetailHeader(label){
   return `<h3 style="margin-top:26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${escapeHtml(label)} <button class="btn btn-outline btn-small" onclick="clearReportDetailFilter()">Close</button></h3>`;
 }
+// Sortable report table headers: each table has its own id (so sort state
+// doesn't collide across tabs) and a map of column key -> accessor function
+// returning a directly-comparable value (number or lowercased string) --
+// simpler and more correct than guessing a type from the raw field, since a
+// few columns (e.g. "Billed" Yes/No) aren't plain fields on the row.
+window.toggleReportSort = function(tableId, key){
+  const cur = state.reportSort[tableId];
+  state.reportSort[tableId] = (cur && cur.key===key) ? { key, dir: cur.dir==='asc'?'desc':'asc' } : { key, dir:'asc' };
+  render();
+};
+function reportSortArrow(tableId, key){
+  const s = state.reportSort[tableId];
+  if(!s || s.key!==key) return '';
+  return s.dir==='asc' ? ' ▲' : ' ▼';
+}
+function sortTh(tableId, key, label){
+  return `<th class="sortable-th" onclick="toggleReportSort('${tableId}','${key}')">${escapeHtml(label)}${reportSortArrow(tableId,key)}</th>`;
+}
+function applyReportSort(rows, tableId, accessors){
+  const s = state.reportSort[tableId];
+  if(!s || !accessors[s.key]) return rows;
+  const getter = accessors[s.key];
+  const sorted = rows.slice().sort((a,b)=>{
+    const av = getter(a), bv = getter(b);
+    if(av<bv) return -1; if(av>bv) return 1; return 0;
+  });
+  return s.dir==='desc' ? sorted.reverse() : sorted;
+}
 function reportTabCollections(){
   const totals = reportTotals(state.reportBills);
   const byDay = reportByDay(state.reportBills);
-  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">
+  const byDaySorted = applyReportSort(byDay, 'collections-byday', {
+    date:d=>d.date, count:d=>d.count, cash:d=>d.cash, upi:d=>d.upi, total:d=>d.total
+  });
+  const dayRows = byDaySorted.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono">${d.count}</td>
     <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}','cash','Cash bills on ${escapeHtml(d.date)}')">₹${d.cash.toFixed(2)}</span></td>
@@ -4937,7 +4970,10 @@ function reportTabCollections(){
     <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}',null,'All bills on ${escapeHtml(d.date)}')">₹${d.total.toFixed(2)}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
-    const bills = filteredReportBills();
+    const bills = applyReportSort(filteredReportBills(), 'collections-detail', {
+      billNumber:b=>b.billNumber||'', date:b=>b.date||'', createdAtMillis:b=>b.createdAtMillis||0,
+      patientName:b=>(b.patientName||'').toLowerCase(), paymentMethod:b=>b.paymentMethod||'', grandTotal:b=>Number(b.grandTotal)||0
+    });
     const rows = bills.map(b=>{
       const safeName = (b.patientName||'').replace(/'/g,"\\'");
       return `<tr>
@@ -4951,7 +4987,7 @@ function reportTabCollections(){
     </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${bills.length? `<table><thead><tr><th>Bill No.</th><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${bills.length? `<table><thead><tr>${sortTh('collections-detail','billNumber','Bill No.')}${sortTh('collections-detail','date','Date')}${sortTh('collections-detail','createdAtMillis','Time (IST)')}${sortTh('collections-detail','patientName','Patient')}${sortTh('collections-detail','paymentMethod','Method')}${sortTh('collections-detail','grandTotal','Amount')}<th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🧾</div>No bills match this filter.</div>`}
     </div>`;
   })() : '';
@@ -4964,7 +5000,7 @@ function reportTabCollections(){
     </div>
     <div class="table-wrap">
       ${state.reportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>Bills</th><th>Cash</th><th>UPI</th><th>Total</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        byDay.length ? `<table><thead><tr>${sortTh('collections-byday','date','Date')}${sortTh('collections-byday','count','Bills')}${sortTh('collections-byday','cash','Cash')}${sortTh('collections-byday','upi','UPI')}${sortTh('collections-byday','total','Total')}</tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No bills in this date range.</div>`}
     </div>
     ${detail}`;
@@ -4972,12 +5008,16 @@ function reportTabCollections(){
 function reportTabPatients(){
   const totals = patientsReportTotals(state.reportPatients);
   const byDay = patientsReportByDay(state.reportPatients);
-  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Patients registered on ${escapeHtml(d.date)}')">
+  const byDaySorted = applyReportSort(byDay, 'patients-byday', { date:d=>d.date, count:d=>d.count });
+  const dayRows = byDaySorted.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Patients registered on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono"><span class="report-amount">${d.count}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
-    const patients = filteredReportPatients();
+    const patients = applyReportSort(filteredReportPatients(), 'patients-detail', {
+      opdNo:p=>p.opdNo||'', name:p=>(p.name||'').toLowerCase(), phone:p=>p.phone||'', gender:p=>p.gender||'',
+      age:p=>Number(p.age)||0, registeredAt:p=>p.registeredAt||'', registeredAtMillis:p=>p.registeredAtMillis||0
+    });
     const rows = patients.map(p=>{
       const safeName = (p.name||'').replace(/'/g,"\\'");
       return `<tr>
@@ -4992,7 +5032,7 @@ function reportTabPatients(){
     </tr>`;}).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${patients.length? `<table><thead><tr><th>OPD No.</th><th>Name</th><th>Phone</th><th>Gender</th><th>Age</th><th>Registered</th><th>Time (IST)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${patients.length? `<table><thead><tr>${sortTh('patients-detail','opdNo','OPD No.')}${sortTh('patients-detail','name','Name')}${sortTh('patients-detail','phone','Phone')}${sortTh('patients-detail','gender','Gender')}${sortTh('patients-detail','age','Age')}${sortTh('patients-detail','registeredAt','Registered')}${sortTh('patients-detail','registeredAtMillis','Time (IST)')}<th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🗂️</div>No patients match this filter.</div>`}
     </div>`;
   })() : '';
@@ -5004,7 +5044,7 @@ function reportTabPatients(){
     </div>
     <div class="table-wrap">
       ${state.patientsReportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>New patients</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        byDay.length ? `<table><thead><tr>${sortTh('patients-byday','date','Date')}${sortTh('patients-byday','count','New patients')}</tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No new patients in this date range.</div>`}
     </div>
     ${detail}`;
@@ -5012,7 +5052,10 @@ function reportTabPatients(){
 function reportTabVisits(){
   const totals = visitsReportTotals(state.reportVisitsList);
   const byDay = visitsReportByDay(state.reportVisitsList);
-  const topReasons = visitReasonBreakdown(state.reportVisitsList, 10);
+  const byDaySorted = applyReportSort(byDay, 'visits-byday', { date:d=>d.date, count:d=>d.count, billed:d=>d.billed });
+  const topReasons = applyReportSort(visitReasonBreakdown(state.reportVisitsList, 10), 'visits-topreasons', {
+    label:r=>(r.label||'').toLowerCase(), count:r=>r.count
+  });
   const reasonRows = topReasons.map(r=>{
     const safeKey = r.key.replace(/'/g,"\\'");
     const safeLabel = r.label.replace(/'/g,"\\'");
@@ -5021,13 +5064,16 @@ function reportTabVisits(){
       <td class="mono">${r.count}</td>
     </tr>`;
   }).join('');
-  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">
+  const dayRows = byDaySorted.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}',null,'Visits on ${escapeHtml(d.date)}')">${d.count}</span></td>
     <td class="mono"><span class="report-amount" onclick="event.stopPropagation(); setReportDetailFilter('${d.date}','billed','Billed visits on ${escapeHtml(d.date)}')">${d.billed}</span></td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
-    const visits = filteredReportVisits();
+    const visits = applyReportSort(filteredReportVisits(), 'visits-detail', {
+      date:v=>v.date||'', createdAtMillis:v=>v.createdAtMillis||0, patientName:v=>(v.patientName||'').toLowerCase(),
+      reason:v=>(v.reason||'').toLowerCase(), doctorName:v=>(v.doctorName||'').toLowerCase(), billId:v=>v.billId?1:0
+    });
     const rows = visits.map(v=>`<tr>
       <td class="mono">${escapeHtml(v.date||'')}</td>
       <td class="mono">${timeIST(v.createdAtMillis)}</td>
@@ -5039,7 +5085,7 @@ function reportTabVisits(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${visits.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Reason</th><th>Doctor</th><th>Billed</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      ${visits.length? `<table><thead><tr>${sortTh('visits-detail','date','Date')}${sortTh('visits-detail','createdAtMillis','Time (IST)')}${sortTh('visits-detail','patientName','Patient')}${sortTh('visits-detail','reason','Reason')}${sortTh('visits-detail','doctorName','Doctor')}${sortTh('visits-detail','billId','Billed')}<th></th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🩺</div>No visits match this filter.</div>`}
     </div>`;
   })() : '';
@@ -5052,23 +5098,29 @@ function reportTabVisits(){
     <div class="table-wrap">
       <h3 style="margin-top:0;">Top visit reasons</h3>
       ${state.visitsReportLoading? loadingSkeleton(5) :
-        topReasons.length ? `<table><thead><tr><th>Reason</th><th>Visits</th></tr></thead><tbody>${reasonRows}</tbody></table>`
+        topReasons.length ? `<table><thead><tr>${sortTh('visits-topreasons','label','Reason')}${sortTh('visits-topreasons','count','Visits')}</tr></thead><tbody>${reasonRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No visit reasons recorded in this date range.</div>`}
     </div>
     <div class="table-wrap">
       ${state.visitsReportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>Visits</th><th>Billed</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        byDay.length ? `<table><thead><tr>${sortTh('visits-byday','date','Date')}${sortTh('visits-byday','count','Visits')}${sortTh('visits-byday','billed','Billed')}</tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No visits in this date range.</div>`}
     </div>
     ${detail}`;
 }
 function reportTabInventory(){
   const agg = inventoryReportAggregates(state.reportVisitsList);
-  const dispensedRows = agg.dispensed.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.qty}</td><td class="mono">${m.visits}</td></tr>`).join('');
-  const toOrderRows = agg.toOrder.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono"><span class="report-amount" onclick="setReportMedicineFilter('${m.key.replace(/'/g,"\\'")}','${escapeHtml(m.name)} — prescribed externally')">${m.count}</span></td></tr>`).join('');
+  const dispensedSorted = applyReportSort(agg.dispensed, 'inventory-dispensed', {
+    name:m=>(m.name||'').toLowerCase(), qty:m=>m.qty, visits:m=>m.visits
+  });
+  const dispensedRows = dispensedSorted.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono">${m.qty}</td><td class="mono">${m.visits}</td></tr>`).join('');
+  const toOrderSorted = applyReportSort(agg.toOrder, 'inventory-toorder', { name:m=>(m.name||'').toLowerCase(), count:m=>m.count });
+  const toOrderRows = toOrderSorted.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td class="mono"><span class="report-amount" onclick="setReportMedicineFilter('${m.key.replace(/'/g,"\\'")}','${escapeHtml(m.name)} — prescribed externally')">${m.count}</span></td></tr>`).join('');
   const totalUnits = agg.dispensed.reduce((s,m)=>s+m.qty,0);
   const detail = (state.reportDetailFilter && state.reportDetailFilter.medicine) ? (()=>{
-    const rows = filteredReportOutsideMeds();
+    const rows = applyReportSort(filteredReportOutsideMeds(), 'inventory-outside-detail', {
+      date:r=>r.date||'', patientName:r=>(r.patientName||'').toLowerCase(), dosage:r=>(r.dosage||'').toLowerCase()
+    });
     const bodyRows = rows.map(r=>`<tr>
       <td class="mono">${escapeHtml(r.date||'')}</td>
       <td>${escapeHtml(r.patientName||'')} <span class="mono" style="color:var(--text-muted);font-size:12px;">OPD ${escapeHtml(r.patientOpdNo||'')}</span></td>
@@ -5076,7 +5128,7 @@ function reportTabInventory(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${rows.length? `<table><thead><tr><th>Date</th><th>Patient</th><th>Dosage / instructions</th></tr></thead><tbody>${bodyRows}</tbody></table>`
+      ${rows.length? `<table><thead><tr>${sortTh('inventory-outside-detail','date','Date')}${sortTh('inventory-outside-detail','patientName','Patient')}${sortTh('inventory-outside-detail','dosage','Dosage / instructions')}</tr></thead><tbody>${bodyRows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">💊</div>No matching prescriptions in this date range.</div>`}
     </div>`;
   })() : '';
@@ -5089,14 +5141,14 @@ function reportTabInventory(){
     <h3 style="margin-top:0;">Top dispensed medicines</h3>
     <div class="table-wrap">
       ${state.visitsReportLoading? loadingSkeleton(5) :
-        dispensedRows ? `<table><thead><tr><th>Medicine</th><th>Qty dispensed</th><th>Visits</th></tr></thead><tbody>${dispensedRows}</tbody></table>`
+        dispensedRows ? `<table><thead><tr>${sortTh('inventory-dispensed','name','Medicine')}${sortTh('inventory-dispensed','qty','Qty dispensed')}${sortTh('inventory-dispensed','visits','Visits')}</tr></thead><tbody>${dispensedRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">💊</div>No medicines dispensed in this date range.</div>`}
     </div>
     <h3>Medicines prescribed from outside</h3>
     <p style="color:var(--text-muted);font-size:13px;margin-top:-8px;">Prescribed externally (not from our pharmacy) during this date range. Click a count to see who and when.</p>
     <div class="table-wrap">
       ${state.visitsReportLoading? loadingSkeleton(3) :
-        toOrderRows ? `<table><thead><tr><th>Medicine</th><th>Times requested</th></tr></thead><tbody>${toOrderRows}</tbody></table>`
+        toOrderRows ? `<table><thead><tr>${sortTh('inventory-toorder','name','Medicine')}${sortTh('inventory-toorder','count','Times requested')}</tr></thead><tbody>${toOrderRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">✅</div>Nothing prescribed externally in this date range.</div>`}
     </div>
     ${detail}`;
@@ -5104,13 +5156,17 @@ function reportTabInventory(){
 function reportTabLabTests(){
   const totals = labReportTotals(state.reportLabRecords);
   const byDay = labReportByDay(state.reportLabRecords);
-  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Lab tests on ${escapeHtml(d.date)}')">
+  const byDaySorted = applyReportSort(byDay, 'labtests-byday', { date:d=>d.date, count:d=>d.count, amount:d=>d.amount });
+  const dayRows = byDaySorted.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Lab tests on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono"><span class="report-amount">${d.count}</span></td>
     <td class="mono">₹${d.amount.toFixed(2)}</td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
-    const records = filteredReportLabRecords();
+    const records = applyReportSort(filteredReportLabRecords(), 'labtests-detail', {
+      date:r=>r.date||'', createdAtMillis:r=>r.createdAtMillis||0, patientName:r=>(r.patientName||'').toLowerCase(),
+      details:r=>(r.details||'').toLowerCase(), amount:r=>Number(r.amount)||0
+    });
     const rows = records.map(r=>`<tr>
       <td class="mono">${escapeHtml(r.date||'')}</td>
       <td class="mono">${timeIST(r.createdAtMillis)}</td>
@@ -5120,7 +5176,7 @@ function reportTabLabTests(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${records.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Patient</th><th>Details</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${records.length? `<table><thead><tr>${sortTh('labtests-detail','date','Date')}${sortTh('labtests-detail','createdAtMillis','Time (IST)')}${sortTh('labtests-detail','patientName','Patient')}${sortTh('labtests-detail','details','Details')}${sortTh('labtests-detail','amount','Amount')}</tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">🧪</div>No lab tests match this filter.</div>`}
     </div>`;
   })() : '';
@@ -5131,7 +5187,7 @@ function reportTabLabTests(){
     </div>
     <div class="table-wrap">
       ${state.labReportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>Tests</th><th>Amount</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        byDay.length ? `<table><thead><tr>${sortTh('labtests-byday','date','Date')}${sortTh('labtests-byday','count','Tests')}${sortTh('labtests-byday','amount','Amount')}</tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No lab tests in this date range.</div>`}
     </div>
     ${detail}`;
@@ -5139,13 +5195,17 @@ function reportTabLabTests(){
 function reportTabPurchases(){
   const totals = purchasesReportTotals(state.reportPurchases);
   const byDay = purchasesReportByDay(state.reportPurchases);
-  const dayRows = byDay.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Purchases on ${escapeHtml(d.date)}')">
+  const byDaySorted = applyReportSort(byDay, 'purchases-byday', { date:d=>d.date, count:d=>d.count, amount:d=>d.amount });
+  const dayRows = byDaySorted.map(d=>`<tr class="report-row-clickable" onclick="setReportDetailFilter('${d.date}',null,'Purchases on ${escapeHtml(d.date)}')">
     <td class="mono">${escapeHtml(d.date)}</td>
     <td class="mono">${d.count}</td>
     <td class="mono">₹${d.amount.toFixed(2)}</td>
   </tr>`).join('');
   const detail = state.reportDetailFilter ? (()=>{
-    const purchases = filteredReportPurchases();
+    const purchases = applyReportSort(filteredReportPurchases(), 'purchases-detail', {
+      date:p=>p.date||'', createdAtMillis:p=>p.createdAtMillis||0, distributorName:p=>(p.distributorName||'').toLowerCase(),
+      invoiceNumber:p=>(p.invoiceNumber||'').toLowerCase(), totalAmount:p=>Number(p.totalAmount)||0, paymentStatus:p=>p.paymentStatus||''
+    });
     const rows = purchases.map(p=>`<tr>
       <td class="mono">${escapeHtml(p.date||'')}</td>
       <td class="mono">${timeIST(p.createdAtMillis)}</td>
@@ -5157,7 +5217,7 @@ function reportTabPurchases(){
     </tr>`).join('');
     return `${reportDetailHeader(state.reportDetailFilter.label)}
     <div class="table-wrap">
-      ${purchases.length? `<table><thead><tr><th>Date</th><th>Time (IST)</th><th>Distributor</th><th>Invoice</th><th>Medicines</th><th>Total</th><th>Payment</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${purchases.length? `<table><thead><tr>${sortTh('purchases-detail','date','Date')}${sortTh('purchases-detail','createdAtMillis','Time (IST)')}${sortTh('purchases-detail','distributorName','Distributor')}${sortTh('purchases-detail','invoiceNumber','Invoice')}<th>Medicines</th>${sortTh('purchases-detail','totalAmount','Total')}${sortTh('purchases-detail','paymentStatus','Payment')}</tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty-state"><div class="icon">📦</div>No purchases match this filter.</div>`}
     </div>`;
   })() : '';
@@ -5170,7 +5230,7 @@ function reportTabPurchases(){
     </div>
     <div class="table-wrap">
       ${state.purchasesReportLoading? loadingSkeleton(5) :
-        byDay.length ? `<table><thead><tr><th>Date</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>${dayRows}</tbody></table>`
+        byDay.length ? `<table><thead><tr>${sortTh('purchases-byday','date','Date')}${sortTh('purchases-byday','count','Purchases')}${sortTh('purchases-byday','amount','Amount')}</tr></thead><tbody>${dayRows}</tbody></table>`
         : `<div class="empty-state"><div class="icon">📊</div>No purchases in this date range.</div>`}
     </div>
     ${detail}`;
