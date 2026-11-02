@@ -760,7 +760,7 @@ let state = {
   showInstallButton:false, showIosInstallHint:false, showPromoPopup:false,
   chatOpen:false, chatMessages:[], chatTeaserVisible:false,
   healthCheckForm:{ age:'', gender:'Male', height:'', weight:'', familyHistory:'no' }, healthCheckResult:null,
-  patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false, patientsMonthFilter:false,
+  patientsSearchField:'name', patientsSearchTerm:'', patientsLoading:false, hasMorePatients:false, patientsMonthFilter:false, patientsTotalCount:null,
   nextOpdNoCache:1,
   medSearch:'', editingPatient:null, editingMed:null, patientFormErrors:null, visitFormErrors:null, sessionStaffName:null, dailyReminderSeen:false,
   summaryPreview:null,
@@ -1401,6 +1401,12 @@ async function computeNextOpdNo(){
     state.nextOpdNoCache = snap.empty ? 1 : (Number(snap.docs[0].data().opdNoNum)||0)+1;
   }catch(e){ state.nextOpdNoCache = 1; }
 }
+async function loadPatientsTotalCount(){
+  try{
+    const snap = await getCountFromServer(collection(db,'patients'));
+    state.patientsTotalCount = snap.data().count;
+  }catch(e){ console.error('Could not load total OPD registration count', e); state.patientsTotalCount = null; }
+}
 async function loadPatientsPage(reset){
   state.patientsLoading = true; render();
   const term = state.patientsSearchTerm.trim();
@@ -1461,7 +1467,7 @@ window.clearPatientsMonthFilter = function(){
   loadPatientsPage(true);
 };
 window.editPatient = function(id){ state.editingPatient = state.data.patients.find(p=>p.id===id); state.patientFormErrors=null; render(); window.scrollTo(0,0); };
-window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await loadPatientsPage(true); };
+window.deletePatient = async function(id){ await deleteDoc(doc(db,'patients',id)); lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), loadPatientsTotalCount()]); };
 window.savePatientForm = async function(){
   const opdNo=document.getElementById('pf-opd').value.trim();
   const name=document.getElementById('pf-name').value.trim();
@@ -1498,6 +1504,7 @@ window.savePatientForm = async function(){
   else{ await addDoc(collection(db,'patients'), {...data, registrationFeeCharged:false}); }
   state.showPatientForm=false;
   lastVisibleDoc=null; await loadPatientsPage(true); await computeNextOpdNo();
+  if(!wasEditing) await loadPatientsTotalCount();
   showToast(wasEditing ? 'Patient details updated. / രോഗിയുടെ വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു.' : '👍 Patient registered! / രോഗിയെ രജിസ്റ്റർ ചെയ്തു!', wasEditing ? 'info' : 'success');
 };
 
@@ -3658,7 +3665,7 @@ window.setView = async function(v){
   try{
     if(v==='home'||v==='blog') await loadBlogPosts();
     if(v==='admin-dashboard') await loadDashboardStats();
-    if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo()]); }
+    if(v==='admin-patients'){ state.patientsSearchTerm=''; state.patientsSearchField='name'; lastVisibleDoc=null; await Promise.all([loadPatientsPage(true), computeNextOpdNo(), loadPatientsTotalCount()]); }
     if(v==='admin-visits'){ resetVisitForm(); state.visitsSearchTerm=''; lastVisibleVisitDoc=null; await Promise.all([loadVisitsPage(true), loadMedicines()]); }
     if(v==='admin-labtests'){
       resetLabRecordForm(); state.labRecordsSearchTerm=''; lastVisibleLabRecordDoc=null; await loadLabRecordsPage(true);
@@ -3706,7 +3713,7 @@ function setView(v){ window.setView(v); }
 function refreshCurrentView(){
   const v = state.view;
   if(v==='admin-dashboard') return loadDashboardStats();
-  if(v==='admin-patients') return Promise.all([loadPatientsPage(true), computeNextOpdNo()]);
+  if(v==='admin-patients') return Promise.all([loadPatientsPage(true), computeNextOpdNo(), loadPatientsTotalCount()]);
   if(v==='admin-visits') return Promise.all([loadVisitsPage(true), loadMedicines()]);
   if(v==='admin-labtests') return loadLabRecordsPage(true);
   if(v==='admin-vaccinations') return Promise.all([loadVaccinationsPage(true), loadVaccinationsDue(), loadVaccinationsTotalCount()]);
@@ -4504,6 +4511,9 @@ function viewAdminPatients(){
   </div>`;
   return adminShell(`
     <h2 class="display">OPD Patient Registration</h2>
+    <div class="stat-row">
+      <div class="stat-card"><div class="num">${state.patientsTotalCount===null?'…':state.patientsTotalCount}</div><div class="label">Total OPD registrations</div></div>
+    </div>
     ${formCard}${state.patientsMonthFilter ? `<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div>Showing patients registered this month</div>
       <button class="btn btn-outline btn-small" onclick="clearPatientsMonthFilter()">Show all patients</button>
